@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+/* 1. Настройка маппинга переменных для Tailwind */
+@theme {
+  /* Мы говорим Tailwind'у: "Используй эти CSS-переменные для утилит" */
+  --color-background: var(--bg);
+  --color-surface: var(--surface);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-text: var(--text);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+}
+
+/* 2. Базовые стили и СВЕТЛАЯ тема (по умолчанию) */
+:root {
+  /* Slate-50 / White palette for Light Mode */
+  --bg: #f8fafc;        /* Светлый фон */
+  --surface: #ffffff;   /* Белые карточки */
+  --border: #e2e8f0;    /* Светлые границы */
+  --text: #0f172a;      /* Темный текст (почти черный) */
+  --muted: #64748b;     /* Серый текст */
+  
+  --primary: #2563eb;       /* Синий остается синим */
+  --primary-hover: #1d4ed8;
+  --danger: #ef4444;
+}
+
+/* 3. ТЕМНАЯ тема (переопределяем значения, если есть класс .dark) */
+.dark {
+  /* Zinc-950 palette for Dark Mode */
+  --bg: #09090b;
+  --surface: #18181b;
+  --border: #27272a;
+  --text: #e4e4e7;
+  --muted: #a1a1aa;
+  
+  /* Primary и Danger можно не менять, они выглядят хорошо на обоих фонах, 
+     но при желании можно чуть высветлить для dark mode */
+}
+
+/* Общие стили */
+body {
+  background-color: var(--bg);
+  color: var(--text);
+  /* Плавный переход цветов при смене темы */
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Кастомный скроллбар (адаптируется под тему) */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--muted);
+}

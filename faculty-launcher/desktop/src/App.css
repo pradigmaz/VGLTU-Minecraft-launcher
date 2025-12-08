@@ -1,0 +1,103 @@
+/* src/App.css */
+:root {
+  --bg-color: #09090b;
+  --card-bg: #18181b;
+  --border-color: #27272a;
+  --accent-color: #2563eb;
+  --accent-hover: #1d4ed8;
+  --text-main: #e4e4e7;
+  --text-dim: #a1a1aa;
+  --success: #22c55e;
+  --error: #ef4444;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: var(--bg-color);
+  color: var(--text-main);
+  overflow: hidden;
+}
+
+/* СКРОЛЛБАР */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #52525b; }
+
+/* ОБЩИЕ */
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 1.5rem; /* Чуть уменьшил отступы */
+  box-sizing: border-box;
+  position: relative;
+}
+
+/* === ИСПРАВЛЕНИЕ КАРТОЧЕК === */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+  
+  /* === ФИКС ОБРЕЗАНИЯ АНИМАЦИИ === */
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  
+  align-content: start;
+  align-items: start;
+  
+  /* Магия: даем место для hover-эффекта и скроллбара */
+  padding: 4px;       /* Отступ со всех сторон, чтобы карточка не резалась при всплытии */
+  padding-right: 8px; /* Доп. место справа для скроллбара */
+  margin-top: 4px;    /* Небольшой отступ от хедера */
+}
+
+/* === МОДАЛЬНОЕ ОКНО === */
+.modal-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  width: 400px;
+  max-width: 90%;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+}
+
+.slider-container {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.slider {
+  flex-grow: 1;
+  accent-color: var(--accent-color);
+  cursor: pointer;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { 100% { transform: rotate(360deg); } }
+

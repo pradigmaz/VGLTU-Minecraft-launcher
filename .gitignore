@@ -1,0 +1,28 @@
+# Папка с документацией (не нужна в репозитории)
+md/
+
+# Временные файлы
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Kiro
+.kiro/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyc
+
+# Скрипты утилит (не часть проекта)
+Markdown_Mirror.py

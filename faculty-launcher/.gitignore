@@ -1,0 +1,59 @@
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Docker volumes and data
+docker-data/
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+
+# Desktop builds
+desktop/dist/
+desktop/dist-electron/
+desktop/release/
+desktop/out/
+*.exe
+*.dmg
+*.AppImage
+*.deb
+*.rpm
+
+# Admin Web builds
+admin-web/dist/
+admin-web/build/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.bak
+
+# Generated MD files (документация вне проекта)
+*.md.md
+**/**.md.md
