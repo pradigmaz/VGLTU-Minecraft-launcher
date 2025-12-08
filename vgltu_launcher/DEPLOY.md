@@ -10,10 +10,50 @@
 
 ---
 
-## Шаг 1: Обновление системы
+## Шаг 1: Обновление системы и базовая безопасность
 
 ```bash
 sudo apt update && sudo apt upgrade -y
+```
+
+### Настройка Firewall (UFW)
+
+```bash
+# Установка UFW
+sudo apt install -y ufw
+
+# Разрешить SSH (ВАЖНО! Иначе потеряете доступ)
+sudo ufw allow 22/tcp
+
+# Разрешить HTTP/HTTPS (если будет Nginx)
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Если НЕ используете Nginx — открыть порты напрямую
+# sudo ufw allow 8000/tcp  # Backend API
+# sudo ufw allow 5173/tcp  # Admin Web
+# sudo ufw allow 9000/tcp  # MinIO API
+# sudo ufw allow 9001/tcp  # MinIO Console
+
+# Включить firewall
+sudo ufw enable
+sudo ufw status
+```
+
+### Отключение root-доступа по SSH (рекомендуется)
+
+```bash
+# Создать обычного пользователя (если ещё нет)
+sudo adduser launcher
+sudo usermod -aG sudo launcher
+
+# Отключить root login
+sudo nano /etc/ssh/sshd_config
+# Найти и изменить:
+#   PermitRootLogin no
+#   PasswordAuthentication no  # если используете SSH ключи
+
+sudo systemctl restart sshd
 ```
 
 ## Шаг 2: Установка Docker
@@ -61,6 +101,22 @@ cd vgltu_launcher
 
 ## Шаг 5: Настройка переменных окружения
 
+### Вариант 1: Интерактивный установщик (рекомендуется)
+
+```bash
+chmod +x install.sh
+./install.sh
+```
+
+Скрипт автоматически:
+- Установит Docker (если нужно)
+- Спросит все необходимые параметры с подсказками
+- Сгенерирует пароли
+- Создаст `.env`
+- Запустит сервисы
+
+### Вариант 2: Ручная настройка
+
 ```bash
 cp .env.example .env
 nano .env
@@ -71,7 +127,7 @@ nano .env
 ```env
 # Telegram Bot (получить у @BotFather)
 BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
-ADMIN_IDS=123456789
+ADMIN_IDS=123456789,987654321  # Несколько ID через запятую
 BOT_USERNAME=your_bot_username
 DEVELOPER_CHAT_ID=123456789
 
@@ -128,36 +184,44 @@ curl http://localhost:8000/health
 
 ---
 
-## Настройка Nginx (опционально)
+## Настройка Nginx (опционально, но рекомендуется)
 
-Для проксирования через домен:
+**Зачем нужен Nginx:**
+- SSL/HTTPS сертификаты (Let's Encrypt)
+- Единый порт 80/443 вместо `:8000`, `:9000`, `:5173`
+- Доменное имя вместо IP
+- Скрытие внутренних портов от интернета
+
+**Если НЕ используете Nginx:**
+- Откройте порты в UFW (см. Шаг 1)
+- Доступ будет по `http://your-ip:8000`
+
+### Автоматическая установка (рекомендуется)
+
+```bash
+sudo ./setup-nginx.sh your-domain.com
+```
+
+Скрипт автоматически:
+- Установит Nginx
+- Настроит конфиг с вашим доменом
+- Предложит установить SSL сертификат (Let's Encrypt)
+
+### Ручная установка
+
+Готовые конфиги в папке `nginx/`:
 
 ```bash
 sudo apt install -y nginx
+
+# Скопировать конфиг
+sudo cp nginx/launcher.conf /etc/nginx/sites-available/launcher
+
+# Изменить домен
 sudo nano /etc/nginx/sites-available/launcher
-```
+# Заменить your-domain.com на ваш домен
 
-```nginx
-server {
-    listen 80;
-    server_name your-domain.com;
-
-    location /api/ {
-        proxy_pass http://localhost:8000/;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
-
-    location / {
-        proxy_pass http://localhost:5173/;
-        proxy_set_header Host $host;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-```
-
-```bash
+# Активировать
 sudo ln -s /etc/nginx/sites-available/launcher /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx

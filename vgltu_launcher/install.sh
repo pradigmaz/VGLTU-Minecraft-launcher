@@ -154,7 +154,7 @@ ask "BOT_USERNAME" "" \
     "BOT_USERNAME"
 
 ask "ADMIN_IDS" "" \
-    "Ваш Telegram ID (узнать: @userinfobot). Несколько через запятую" \
+    "Telegram ID админов (узнать: @userinfobot). Несколько через запятую без пробелов: 123,456,789" \
     "ADMIN_IDS"
 
 ask "DEVELOPER_CHAT_ID" "$ADMIN_IDS" \
