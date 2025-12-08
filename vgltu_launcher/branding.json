@@ -1,0 +1,12 @@
+{
+  "name": "Pixel Launcher",
+  "shortName": "pixellauncher",
+  "appId": "com.pixellauncher.launcher",
+  "dataFolder": ".pixel-launcher",
+  "dbName": "pixel_launcher",
+  "storageBucket": "pixellauncher-storage",
+  "envPrefix": "PIXEL_LAUNCHER",
+  "containerPrefix": "pixellauncher",
+  "yggdrasilName": "pixellauncher-yggdrasil",
+  "adminTitle": "Pixel Admin"
+}
