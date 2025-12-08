@@ -279,3 +279,69 @@ docker-compose up -d
 # Очистка неиспользуемых образов
 docker system prune -a
 ```
+
+---
+
+## Backup и восстановление
+
+### Создание backup
+
+```bash
+./manage.sh backup
+```
+
+Создаёт backup в `backups/YYYYMMDD_HHMMSS/`:
+- PostgreSQL (SQL dump)
+- MinIO (архив файлов)
+- .env (конфигурация)
+
+### Восстановление из backup
+
+```bash
+./manage.sh restore backups/20250109_120000
+```
+
+### Автоматический backup (cron)
+
+```bash
+# Добавить в crontab
+crontab -e
+
+# Backup каждый день в 3:00
+0 3 * * * cd /opt/vgltu_launcher && ./manage.sh backup
+
+# Удаление старых backup (старше 30 дней)
+0 4 * * * find /opt/vgltu_launcher/backups -type d -mtime +30 -exec rm -rf {} +
+```
+
+---
+
+## Production Checklist
+
+Перед запуском в production проверьте:
+
+### Безопасность
+- [ ] Все пароли изменены с дефолтных (`.env`)
+- [ ] `SECRET_KEY` сгенерирован (`openssl rand -hex 32`)
+- [ ] Firewall настроен (UFW)
+- [ ] SSH: root login отключён
+- [ ] SSL сертификаты установлены (если используется Nginx)
+
+### Конфигурация
+- [ ] `CORS_ORIGINS` содержит только ваш домен
+- [ ] `ADMIN_IDS` содержит корректные Telegram ID
+- [ ] DNS записи направлены на сервер
+- [ ] Nginx конфиг обновлён с вашим доменом
+
+### Мониторинг
+- [ ] Health checks работают (`./manage.sh health`)
+- [ ] Логи ротируются (настроено в docker-compose.yml)
+- [ ] Backup настроен (cron)
+- [ ] Тестовый backup/restore выполнен
+
+### Тестирование
+- [ ] Backend API доступен (`curl http://localhost:8000/health`)
+- [ ] MinIO доступен (http://localhost:9001)
+- [ ] Telegram бот отвечает
+- [ ] Загрузка модпака работает
+- [ ] Desktop launcher подключается

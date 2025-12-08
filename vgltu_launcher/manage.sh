@@ -135,6 +135,70 @@ cmd_reset_service() {
     log_info "Сброс сервиса $service завершен"
 }
 
+cmd_backup() {
+    check_docker
+    local backup_dir="backups/$(date +%Y%m%d_%H%M%S)"
+    mkdir -p "$backup_dir"
+    
+    log_info "Создание backup в $backup_dir..."
+    
+    # PostgreSQL
+    log_info "Backup PostgreSQL..."
+    docker-compose exec -T postgres pg_dump -U launcher pixel_launcher > "$backup_dir/postgres.sql"
+    
+    # MinIO (копирование данных)
+    log_info "Backup MinIO..."
+    tar -czf "$backup_dir/minio.tar.gz" docker-data/minio 2>/dev/null || log_warn "MinIO данные пусты"
+    
+    # .env (без секретов)
+    log_info "Backup конфигурации..."
+    cp .env "$backup_dir/.env.backup"
+    
+    log_info "Backup завершён: $backup_dir"
+    du -sh "$backup_dir"
+}
+
+cmd_restore() {
+    local backup_path="$1"
+    if [ -z "$backup_path" ] || [ ! -d "$backup_path" ]; then
+        log_error "Укажите путь к backup: ./manage.sh restore backups/YYYYMMDD_HHMMSS"
+        exit 1
+    fi
+    
+    log_warn "Это ВОССТАНОВИТ данные из $backup_path"
+    read -p "Вы уверены? (да/нет): " confirm
+    [ "$confirm" != "да" ] && exit 0
+    
+    check_docker
+    
+    # PostgreSQL
+    if [ -f "$backup_path/postgres.sql" ]; then
+        log_info "Восстановление PostgreSQL..."
+        docker-compose exec -T postgres psql -U launcher pixel_launcher < "$backup_path/postgres.sql"
+    fi
+    
+    # MinIO
+    if [ -f "$backup_path/minio.tar.gz" ]; then
+        log_info "Восстановление MinIO..."
+        docker-compose stop minio
+        rm -rf docker-data/minio
+        tar -xzf "$backup_path/minio.tar.gz"
+        docker-compose start minio
+    fi
+    
+    log_info "Восстановление завершено"
+}
+
+cmd_health() {
+    check_docker
+    log_info "Проверка здоровья сервисов..."
+    echo ""
+    docker-compose ps
+    echo ""
+    log_info "Health checks:"
+    docker inspect --format='{{.Name}}: {{.State.Health.Status}}' $(docker-compose ps -q) 2>/dev/null || log_warn "Health checks не настроены"
+}
+
 cmd_help() {
     echo "Управление Docker для $APP_NAME"
     echo ""
@@ -145,7 +209,10 @@ cmd_help() {
     echo "  stop               Остановить все сервисы"
     echo "  restart            Перезапустить все сервисы"
     echo "  status             Показать статус сервисов"
+    echo "  health             Проверить health checks"
     echo "  logs [сервис]      Показать логи (опционально для конкретного сервиса)"
+    echo "  backup             Создать backup (postgres, minio, .env)"
+    echo "  restore <путь>     Восстановить из backup"
     echo "  reset              Сбросить ВСЕ данные (postgres, minio, redis)"
     echo "  reset-service X    Сбросить данные конкретного сервиса (postgres|minio|redis)"
     echo "  help               Показать эту справку"
@@ -153,7 +220,8 @@ cmd_help() {
     echo "Примеры:"
     echo "  ./manage.sh start"
     echo "  ./manage.sh logs backend"
-    echo "  ./manage.sh reset-service postgres"
+    echo "  ./manage.sh backup"
+    echo "  ./manage.sh restore backups/20250109_120000"
 }
 
 # Main
@@ -162,7 +230,10 @@ case "${1:-help}" in
     stop)           cmd_stop ;;
     restart)        cmd_restart ;;
     status)         cmd_status ;;
+    health)         cmd_health ;;
     logs)           cmd_logs "$2" ;;
+    backup)         cmd_backup ;;
+    restore)        cmd_restore "$2" ;;
     reset)          cmd_reset ;;
     reset-service)  cmd_reset_service "$2" ;;
     help|--help|-h) cmd_help ;;
