@@ -88,7 +88,7 @@ app.whenReady().then(() => {
   ipcMain.handle('get-instances', async () => {
      try {
        const res = await axios.get(`${API_URL}/client/instances`)
-       const instances = res.data
+       const instances = res.data.items || []
        gameManager.cleanOldInstances(instances).catch(console.error)
        return instances
      } catch (e) {
