@@ -34,6 +34,9 @@ else
     exit 1
 fi
 
+# Debug output
+# echo "Using Docker Compose command: $DOCKER_COMPOSE_CMD"
+
 check_env() {
     if [ ! -f ".env" ]; then
         log_error "Файл .env не найден!"
