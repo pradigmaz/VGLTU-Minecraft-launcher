@@ -4,6 +4,7 @@
 # Устанавливает Docker, настраивает .env и запускает проект
 
 set -e
+# set -x  # Uncomment for debugging
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -36,6 +37,10 @@ log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step() { echo -e "\n${BLUE}▶ $1${NC}"; }
 log_hint() { echo -e "  ${CYAN}↳ $1${NC}"; }
+
+# Check dependencies
+command -v curl >/dev/null 2>&1 || { log_error "curl не установлен"; exit 1; }
+command -v openssl >/dev/null 2>&1 || log_warn "openssl не найден, генерация паролей может не работать"
 
 ask() {
     local prompt="$1"
@@ -260,9 +265,17 @@ if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
     
     # Use sudo for docker if not in group yet
     if groups | grep -q docker; then
-        docker-compose up -d
+        if docker compose version &> /dev/null; then
+             docker compose up -d
+        else
+             docker-compose up -d
+        fi
     else
-        sudo docker-compose up -d
+        if docker compose version &> /dev/null; then
+             sudo docker compose up -d
+        else
+             sudo docker-compose up -d
+        fi
     fi
     
     echo ""
