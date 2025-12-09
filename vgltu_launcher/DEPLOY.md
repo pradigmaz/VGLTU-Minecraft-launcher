@@ -36,6 +36,7 @@ sudo ufw allow 443/tcp
 # sudo ufw allow 9001/tcp  # MinIO Console
 
 # Включить firewall
+# ВНИМАНИЕ: Убедитесь, что разрешили SSH (порт 22) перед включением!
 sudo ufw enable
 sudo ufw status
 ```
@@ -59,24 +60,32 @@ sudo systemctl restart sshd
 ## Шаг 2: Установка Docker
 
 ```bash
-# Установка зависимостей
+# 1. Установка зависимостей
+sudo apt update
 sudo apt install -y ca-certificates curl gnupg lsb-release
 
-# Добавление GPG ключа Docker
+# 2. Добавление GPG ключа Docker
 sudo mkdir -p /etc/apt/keyrings
-curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
 
-# Добавление репозитория (для Ubuntu)
+# Вариант с curl:
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+# ИЛИ вариант с wget (если curl недоступен):
+# wget -qO- https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+# 3. Настройка прав доступа к ключу
+sudo chmod a+r /etc/apt/keyrings/docker.gpg
+
+# 4. Добавление репозитория (для Ubuntu)
 echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
-# Установка Docker
+# 5. Установка Docker
 sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
 
-# Добавление пользователя в группу docker (чтобы не писать sudo)
+# 6. Добавление пользователя в группу docker (чтобы не писать sudo)
 sudo usermod -aG docker $USER
 
-# Перелогиниться или выполнить:
+# 7. Применение изменений групп
 newgrp docker
 ```
 
