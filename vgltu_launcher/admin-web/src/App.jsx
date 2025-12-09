@@ -1,12 +1,12 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider } from './lib/ThemeContext';
-import { LanguageProvider, useLanguage } from './lib/LanguageContext';
+import { LanguageProvider } from './lib/LanguageContext';
 
 // Pages
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import UploadPage from './pages/Upload';
-import FileManager from './pages/FileManager';
+import InstanceSettings from './pages/InstanceSettings';
 
 // Components
 import Header from './components/Header';
@@ -16,7 +16,6 @@ const PrivateRoute = ({ children }) => {
   return token ? children : <Navigate to="/login" />;
 };
 
-// Компонент-обертка для лейаута с хедером (только для защищенных страниц)
 const Layout = ({ children }) => {
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -36,10 +35,8 @@ const Layout = ({ children }) => {
 function AppContent() {
   return (
     <Routes>
-      {/* Публичный роут (Логин) */}
       <Route path="/login" element={<Login />} />
       
-      {/* Защищенные роуты */}
       <Route path="/" element={
         <PrivateRoute>
           <Layout><Dashboard /></Layout>
@@ -52,9 +49,9 @@ function AppContent() {
         </PrivateRoute>
       } />
 
-      <Route path="/instance/:id/files" element={
+      <Route path="/instance/:id/settings" element={
         <PrivateRoute>
-          <Layout><FileManager /></Layout>
+          <Layout><InstanceSettings /></Layout>
         </PrivateRoute>
       } />
     </Routes>

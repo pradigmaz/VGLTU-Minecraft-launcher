@@ -5,7 +5,7 @@ import os
 
 from .database import engine, Base, redis_client
 import sqlalchemy as sa
-from app.routes import yggdrasil, admin, client, auth
+from app.routes import yggdrasil, admin, client, auth, sftp
 
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -59,6 +59,7 @@ app.include_router(yggdrasil.router)
 app.include_router(admin.router)
 app.include_router(client.router)
 app.include_router(auth.router)
+app.include_router(sftp.router)
 
 # --- RATE LIMITING ---
 # Global limiter с Redis storage и default limits
@@ -71,6 +72,7 @@ limiter = Limiter(
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
 
 @app.get("/")
 async def root():

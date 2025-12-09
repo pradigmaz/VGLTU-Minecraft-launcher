@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
+from datetime import datetime
 import uuid
 
 # --- Yggdrasil Request/Response Models ---
@@ -67,3 +68,46 @@ class FileNode(BaseModel):
 
 class ConfigUpdateRequest(BaseModel):
     content: str
+# --- SFTP Schemas ---
+class SFTPConfigBase(BaseModel):
+    host: str
+    port: int = 22
+    username: str
+    password: str
+    sync_mods: bool = True
+    sync_config: bool = True
+    sync_shaderpacks: bool = False
+    sync_resourcepacks: bool = False
+    sync_scripts: bool = False
+    auto_sync: bool = False
+    sync_interval_minutes: int = 30
+
+class SFTPConfigCreate(SFTPConfigBase):
+    pass
+
+class SFTPConfigUpdate(BaseModel):
+    # Все поля опциональны для PATCH
+    host: Optional[str] = None
+    port: Optional[int] = None
+    username: Optional[str] = None
+    password: Optional[str] = None
+    sync_mods: Optional[bool] = None
+    sync_config: Optional[bool] = None
+    sync_shaderpacks: Optional[bool] = None
+    sync_resourcepacks: Optional[bool] = None
+    sync_scripts: Optional[bool] = None
+    auto_sync: Optional[bool] = None
+    sync_interval_minutes: Optional[int] = None
+
+class SFTPConfigResponse(SFTPConfigBase):
+    id: int
+    instance_id: str
+    last_sync: Optional[datetime]
+    
+    class Config:
+        from_attributes = True
+
+class SyncLog(BaseModel):
+    status: str # 'success', 'failed'
+    details: str
+    timestamp: datetime

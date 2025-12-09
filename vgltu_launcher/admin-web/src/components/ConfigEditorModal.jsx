@@ -49,7 +49,7 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
       <div className="bg-surface border border-border rounded-xl w-[95vw] h-[90vh] flex flex-col shadow-2xl overflow-hidden relative">
         
         {/* --- HEADER --- */}
-        <div className="flex justify-between items-center p-4 border-b border-border bg-gray-50 dark:bg-black/20">
+        <div className="flex justify-between items-center p-4 border-b border-border bg-black/5 dark:bg-black/20">
           <div className="flex items-center gap-3">
             {isMarkdown ? <FileText className="text-pink-500" size={20}/> : <FileCode className="text-blue-500" size={20}/>}
             <div>
@@ -68,7 +68,7 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
         </div>
 
         {/* --- EDITOR AREA --- */}
-        <div className="flex-1 relative overflow-hidden bg-white dark:bg-[#0d1117]">
+        <div className="flex-1 relative overflow-hidden bg-background">
           {loading ? (
             <div className="absolute inset-0 flex items-center justify-center flex-col gap-3 text-muted bg-surface">
               <Loader2 className="animate-spin text-primary" size={40} />
@@ -101,9 +101,7 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
                 style={{ 
                     borderRadius: 0, 
                     border: 'none',
-                    height: '100%',
-                    backgroundColor: theme === 'dark' ? '#0d1117' : '#ffffff',
-                    color: theme === 'dark' ? '#c9d1d9' : '#24292e'
+                    height: '100%'
                 }}
               />
             </div>
@@ -112,9 +110,7 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
             <textarea
               value={content}
               onChange={e => setContent(e.target.value)}
-              className="w-full h-full font-mono text-sm p-4 outline-none resize-none leading-relaxed transition-colors
-                         bg-white text-gray-900 
-                         dark:bg-[#0d1117] dark:text-gray-200"
+              className="w-full h-full font-mono text-sm p-4 outline-none resize-none leading-relaxed transition-colors bg-background text-text"
               spellCheck="false"
               style={{ tabSize: 4 }}
             />
@@ -122,7 +118,7 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
         </div>
 
         {/* --- FOOTER --- */}
-        <div className="p-4 border-t border-border flex justify-between items-center bg-gray-50 dark:bg-black/20">
+        <div className="p-4 border-t border-border flex justify-between items-center bg-black/5 dark:bg-black/20">
           <div className="text-xs text-muted hidden sm:block">
             {content.length} characters
           </div>

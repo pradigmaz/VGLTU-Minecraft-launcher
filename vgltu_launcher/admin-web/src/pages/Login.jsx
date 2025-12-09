@@ -52,7 +52,7 @@ export default function Login() {
           <Loader2 className="animate-spin mx-auto text-primary" size={32} />
         ) : (
           <div className="space-y-6">
-            <div className="bg-black/50 p-4 rounded-lg border border-border font-mono text-xl tracking-wider text-primary">
+            <div className="bg-black/10 dark:bg-black/50 p-4 rounded-lg border border-border font-mono text-xl tracking-wider text-primary">
               {code.slice(0, 8)}...
             </div>
             
@@ -67,7 +67,7 @@ export default function Login() {
 
             <p className="text-xs text-muted">
               Нажмите кнопку или отправьте боту команду:<br/>
-              <code className="bg-black/30 px-1 rounded">/start {code}</code>
+              <code className="bg-black/10 dark:bg-black/30 px-1 rounded">/start {code}</code>
             </p>
           </div>
         )}

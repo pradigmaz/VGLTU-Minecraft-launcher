@@ -30,3 +30,5 @@ minio_client = Minio(
     secret_key=MINIO_SECRET_KEY,
     secure=MINIO_USE_SSL
 )
+
+BUCKET_NAME = "launcher-files"

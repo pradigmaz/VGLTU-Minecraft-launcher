@@ -18,7 +18,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
-BUCKET_NAME = os.getenv("MINIO_BUCKET", "pixellauncher-storage")
+BUCKET_NAME = os.getenv("MINIO_BUCKET", "launcher-files")
 
 # ХЕЛПЕР ДЛЯ ЛЕЧЕНИЯ КОДИРОВКИ
 def decode_archive_filename(filename: str, archive_type: str) -> str:

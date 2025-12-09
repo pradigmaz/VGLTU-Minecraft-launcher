@@ -14,7 +14,7 @@ export default function Header({ onLogout }) {
           <Server className="text-white" size={24} />
         </div>
         <div>
-          <h1 className="text-xl font-bold text-text dark:text-white leading-tight">
+          <h1 className="text-xl font-bold text-text leading-tight">
             Pixel Admin
           </h1>
           <p className="text-xs text-muted font-medium">v3.2 Stable</p>
