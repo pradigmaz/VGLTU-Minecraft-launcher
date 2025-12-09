@@ -263,19 +263,32 @@ read start_now
 if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
     log_info "Запуск сервисов..."
     
-    # Use sudo for docker if not in group yet
+    # Determine Docker Compose command
+    DOCKER_COMPOSE_CMD=""
+    
     if groups | grep -q docker; then
+        # User is in docker group
         if docker compose version &> /dev/null; then
-             docker compose up -d
-        else
-             docker-compose up -d
+             DOCKER_COMPOSE_CMD="docker compose"
+        elif command -v docker-compose &> /dev/null; then
+             DOCKER_COMPOSE_CMD="docker-compose"
         fi
     else
-        if docker compose version &> /dev/null; then
-             sudo docker compose up -d
-        else
-             sudo docker-compose up -d
+        # User needs sudo
+        # Check if 'docker compose' works with sudo
+        if sudo docker compose version &> /dev/null; then
+             DOCKER_COMPOSE_CMD="sudo docker compose"
+        elif sudo docker-compose version &> /dev/null; then
+             DOCKER_COMPOSE_CMD="sudo docker-compose"
         fi
+    fi
+
+    if [ -z "$DOCKER_COMPOSE_CMD" ]; then
+        log_error "Не удалось найти работающую команду docker compose (или sudo docker compose)"
+        log_hint "Попробуйте запустить вручную: docker compose up -d"
+    else
+        log_info "Используется команда: $DOCKER_COMPOSE_CMD"
+        $DOCKER_COMPOSE_CMD up -d
     fi
     
     echo ""

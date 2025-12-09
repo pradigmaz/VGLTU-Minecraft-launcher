@@ -24,6 +24,16 @@ log_info() { echo -e "${GREEN}[ИНФО]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[ПРЕДУПРЕЖДЕНИЕ]${NC} $1"; }
 log_error() { echo -e "${RED}[ОШИБКА]${NC} $1"; }
 
+# Detect Docker Compose command
+if docker compose version &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker compose"
+elif command -v docker-compose &> /dev/null; then
+    DOCKER_COMPOSE_CMD="docker-compose"
+else
+    log_error "Docker Compose не найден!"
+    exit 1
+fi
+
 check_env() {
     if [ ! -f ".env" ]; then
         log_error "Файл .env не найден!"
@@ -48,7 +58,7 @@ cmd_start() {
     check_env
     check_docker
     log_info "Запуск сервисов..."
-    docker-compose up -d
+    $DOCKER_COMPOSE_CMD up -d
     log_info "Ожидание готовности сервисов..."
     sleep 5
     cmd_status
@@ -56,7 +66,7 @@ cmd_start() {
 
 cmd_stop() {
     log_info "Остановка сервисов..."
-    docker-compose down
+    $DOCKER_COMPOSE_CMD down
     log_info "Сервисы остановлены"
 }
 
@@ -67,15 +77,15 @@ cmd_restart() {
 
 cmd_status() {
     log_info "Статус сервисов:"
-    docker-compose ps
+    $DOCKER_COMPOSE_CMD ps
 }
 
 cmd_logs() {
     local service="${1:-}"
     if [ -n "$service" ]; then
-        docker-compose logs -f --tail=100 "$service"
+        $DOCKER_COMPOSE_CMD logs -f --tail=100 "$service"
     else
-        docker-compose logs -f --tail=100
+        $DOCKER_COMPOSE_CMD logs -f --tail=100
     fi
 }
 
@@ -88,7 +98,7 @@ cmd_reset() {
     fi
 
     log_info "Остановка сервисов..."
-    docker-compose down 2>/dev/null || true
+    $DOCKER_COMPOSE_CMD down 2>/dev/null || true
 
     log_info "Удаление директорий с данными..."
     rm -rf docker-data/postgres
@@ -106,25 +116,25 @@ cmd_reset_service() {
             log_warn "Это УДАЛИТ данные PostgreSQL!"
             read -p "Вы уверены? (да/нет): " confirm
             [ "$confirm" != "да" ] && exit 0
-            docker-compose stop postgres backend bot
+            $DOCKER_COMPOSE_CMD stop postgres backend bot
             rm -rf docker-data/postgres
-            docker-compose up -d
+            $DOCKER_COMPOSE_CMD up -d
             ;;
         minio|s3)
             log_warn "Это УДАЛИТ данные MinIO/S3!"
             read -p "Вы уверены? (да/нет): " confirm
             [ "$confirm" != "да" ] && exit 0
-            docker-compose stop minio
+            $DOCKER_COMPOSE_CMD stop minio
             rm -rf docker-data/minio
-            docker-compose up -d
+            $DOCKER_COMPOSE_CMD up -d
             ;;
         redis)
             log_warn "Это УДАЛИТ данные Redis!"
             read -p "Вы уверены? (да/нет): " confirm
             [ "$confirm" != "да" ] && exit 0
-            docker-compose stop redis backend bot
+            $DOCKER_COMPOSE_CMD stop redis backend bot
             rm -rf docker-data/redis
-            docker-compose up -d
+            $DOCKER_COMPOSE_CMD up -d
             ;;
         *)
             log_error "Неизвестный сервис: $service"
@@ -144,7 +154,7 @@ cmd_backup() {
     
     # PostgreSQL
     log_info "Backup PostgreSQL..."
-    docker-compose exec -T postgres pg_dump -U launcher pixel_launcher > "$backup_dir/postgres.sql"
+    $DOCKER_COMPOSE_CMD exec -T postgres pg_dump -U launcher pixel_launcher > "$backup_dir/postgres.sql"
     
     # MinIO (копирование данных)
     log_info "Backup MinIO..."
@@ -174,16 +184,16 @@ cmd_restore() {
     # PostgreSQL
     if [ -f "$backup_path/postgres.sql" ]; then
         log_info "Восстановление PostgreSQL..."
-        docker-compose exec -T postgres psql -U launcher pixel_launcher < "$backup_path/postgres.sql"
+        $DOCKER_COMPOSE_CMD exec -T postgres psql -U launcher pixel_launcher < "$backup_path/postgres.sql"
     fi
     
     # MinIO
     if [ -f "$backup_path/minio.tar.gz" ]; then
         log_info "Восстановление MinIO..."
-        docker-compose stop minio
+        $DOCKER_COMPOSE_CMD stop minio
         rm -rf docker-data/minio
         tar -xzf "$backup_path/minio.tar.gz"
-        docker-compose start minio
+        $DOCKER_COMPOSE_CMD start minio
     fi
     
     log_info "Восстановление завершено"
@@ -193,10 +203,10 @@ cmd_health() {
     check_docker
     log_info "Проверка здоровья сервисов..."
     echo ""
-    docker-compose ps
+    $DOCKER_COMPOSE_CMD ps
     echo ""
     log_info "Health checks:"
-    docker inspect --format='{{.Name}}: {{.State.Health.Status}}' $(docker-compose ps -q) 2>/dev/null || log_warn "Health checks не настроены"
+    docker inspect --format='{{.Name}}: {{.State.Health.Status}}' $($DOCKER_COMPOSE_CMD ps -q) 2>/dev/null || log_warn "Health checks не настроены"
 }
 
 cmd_help() {
