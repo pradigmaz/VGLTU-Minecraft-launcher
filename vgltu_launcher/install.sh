@@ -24,6 +24,10 @@ else
     APP_NAME="Launcher"
 fi
 
+# Constants for Node.js
+REQUIRED_NODE_MAJOR=20
+MIN_NODE_VERSION="20.0.0"
+
 echo -e "${CYAN}"
 echo "╔════════════════════════════════════════════════════════════╗"
 echo "║                                                            ║"
@@ -100,6 +104,52 @@ ask_generate() {
     eval "$var_name=\"$value\""
 }
 
+check_node_version() {
+    if command -v node &> /dev/null; then
+        current_version=$(node -v | sed 's/v//')
+        major_version=$(echo "$current_version" | cut -d'.' -f1)
+        
+        if [ "$major_version" -ge "$REQUIRED_NODE_MAJOR" ]; then
+            return 0  # Version OK
+        else
+            return 1  # Version outdated
+        fi
+    else
+        return 2  # Node.js not installed
+    fi
+}
+
+install_nodejs() {
+    log_info "Установка Node.js $REQUIRED_NODE_MAJOR.x..."
+    
+    # Remove old version if exists
+    if command -v node &> /dev/null; then
+        log_info "Удаление старой версии Node.js..."
+        sudo apt remove --purge -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+        sudo apt autoremove -y
+    fi
+    
+    # Clean conflicting files
+    log_info "Очистка старых файлов..."
+    sudo rm -rf /usr/include/node /usr/local/include/node 2>/dev/null || true
+    
+    # Install from NodeSource
+    log_info "Добавление репозитория NodeSource..."
+    curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
+    
+    log_info "Установка Node.js..."
+    sudo apt-get install -y nodejs
+    
+    # Verify installation
+    if command -v node &> /dev/null; then
+        log_info "Node.js установлен: $(node -v)"
+        log_info "npm установлен: $(npm -v)"
+    else
+        log_error "Не удалось установить Node.js"
+        log_info "Попробуйте установить вручную или используйте nvm"
+    fi
+}
+
 # ============================================
 # STEP 1: Check/Install Docker
 # ============================================
@@ -139,6 +189,42 @@ else
     sudo chmod +x /usr/local/bin/docker-compose
     log_info "Docker Compose установлен"
 fi
+
+# ============================================
+# STEP 1.5: Check/Install Node.js
+# ============================================
+log_step "Шаг 1.5/5: Проверка Node.js"
+
+check_node_version
+status=$?
+
+case $status in
+    0)
+        log_info "Node.js установлен: $(node -v)"
+        ;;
+    1)
+        log_warn "Node.js версия $(node -v) устарела. Требуется $MIN_NODE_VERSION+"
+        echo -n "Обновить Node.js? [Y/n]: "
+        read update_node
+        if [ "$update_node" != "n" ] && [ "$update_node" != "N" ]; then
+            install_nodejs
+        else
+            log_error "Node.js $MIN_NODE_VERSION+ необходим для работы admin-web"
+            log_info "Установите вручную: https://nodejs.org/ или используйте nvm"
+            log_warn "Продолжаем без обновления (admin-web может не работать)"
+        fi
+        ;;
+    2)
+        log_warn "Node.js не найден"
+        echo -n "Установить Node.js $REQUIRED_NODE_MAJOR.x LTS? [Y/n]: "
+        read install_node
+        if [ "$install_node" != "n" ] && [ "$install_node" != "N" ]; then
+            install_nodejs
+        else
+            log_warn "Node.js не установлен. Admin-web требует Node.js $MIN_NODE_VERSION+"
+        fi
+        ;;
+esac
 
 # ============================================
 # STEP 2: Telegram Bot Configuration
@@ -309,6 +395,13 @@ if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
     echo "    ./manage.sh logs      — просмотр логов"
     echo "    ./manage.sh stop      — остановка"
     echo ""
+    log_info "Для запуска admin-web (веб-панель):"
+    echo "  cd admin-web"
+    echo "  npm install"
+    echo "  npm run dev"
+    echo ""
+    log_hint "Admin-web будет доступна на http://localhost:5173"
+    log_hint "Не забудьте настроить CORS_ORIGINS в .env если используете другой хост"
 else
     echo ""
     log_info "Конфигурация сохранена. Для запуска выполните:"

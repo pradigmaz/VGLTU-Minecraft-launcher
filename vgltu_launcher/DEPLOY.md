@@ -89,6 +89,85 @@ sudo usermod -aG docker $USER
 newgrp docker
 ```
 
+## Шаг 2.5: Установка Node.js (для admin-web)
+
+Admin-web требует Node.js 20.x или выше.
+
+### Проверка текущей версии
+
+```bash
+node -v
+```
+
+### Установка Node.js 20.x LTS
+
+**Способ 1: Через NodeSource (рекомендуется)**
+
+```bash
+# Удалить старую версию если есть
+sudo apt remove --purge nodejs npm libnode-dev
+sudo apt autoremove
+
+# Очистить конфликтующие файлы
+sudo rm -rf /usr/include/node /usr/local/include/node
+
+# Установить Node.js 20.x
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Проверить версию
+node -v
+npm -v
+```
+
+**Способ 2: Через nvm (альтернатива)**
+
+```bash
+# Установить nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+
+# Перезагрузить shell
+source ~/.bashrc
+
+# Установить Node.js 20 LTS
+nvm install 20
+nvm use 20
+nvm alias default 20
+
+# Проверить
+node -v
+npm -v
+```
+
+### Установка зависимостей admin-web
+
+```bash
+cd /opt/vgltu_launcher/admin-web
+
+# Установить зависимости
+npm install
+
+# Запустить dev сервер (для разработки)
+npm run dev
+
+# Или собрать для production
+npm run build
+```
+
+### Настройка CORS для admin-web
+
+После запуска admin-web будет доступна на порту 5173. Добавьте в `.env`:
+
+```env
+CORS_ORIGINS=http://your-server-ip:5173
+```
+
+Для production с Nginx:
+
+```env
+CORS_ORIGINS=https://your-domain.com
+```
+
 ## Шаг 3: Установка Docker Compose (если не установился)
 
 ```bash

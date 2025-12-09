@@ -212,6 +212,66 @@ cmd_health() {
     docker inspect --format='{{.Name}}: {{.State.Health.Status}}' $($DOCKER_COMPOSE_CMD ps -q) 2>/dev/null || log_warn "Health checks не настроены"
 }
 
+cmd_node_install() {
+    log_info "Установка/Обновление Node.js (v20)..."
+    
+    # Constants for Node.js
+    local REQUIRED_NODE_MAJOR=20
+    
+    if command -v node &> /dev/null; then
+        log_info "Удаление старой версии Node.js..."
+        sudo apt remove --purge -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+        sudo apt autoremove -y
+    fi
+    
+    log_info "Очистка старых файлов..."
+    sudo rm -rf /usr/include/node /usr/local/include/node 2>/dev/null || true
+    
+    log_info "Добавление репозитория NodeSource..."
+    curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
+    
+    log_info "Установка Node.js..."
+    sudo apt-get install -y nodejs
+    
+    if command -v node &> /dev/null; then
+        log_info "Node.js установлен: $(node -v)"
+        log_info "npm установлен: $(npm -v)"
+    else
+        log_error "Не удалось установить Node.js"
+    fi
+}
+
+cmd_node_check() {
+    if command -v node &> /dev/null; then
+        log_info "Node.js: $(node -v)"
+        log_info "npm:     $(npm -v)"
+    else
+        log_warn "Node.js не установлен"
+        echo "Для установки выполните: ./manage.sh node-install"
+    fi
+}
+
+cmd_admin_start() {
+    log_info "Запуск admin-web (dev)..."
+    cd admin-web
+    if [ ! -d "node_modules" ]; then
+        log_info "Установка зависимостей..."
+        npm install
+    fi
+    npm run dev
+}
+
+cmd_admin_build() {
+    log_info "Сборка admin-web..."
+    cd admin-web
+    if [ ! -d "node_modules" ]; then
+        log_info "Установка зависимостей..."
+        npm install
+    fi
+    npm run build
+    log_info "Сборка завершена (dist/)"
+}
+
 cmd_help() {
     echo "Управление Docker для $APP_NAME"
     echo ""
@@ -228,6 +288,13 @@ cmd_help() {
     echo "  restore <путь>     Восстановить из backup"
     echo "  reset              Сбросить ВСЕ данные (postgres, minio, redis)"
     echo "  reset-service X    Сбросить данные конкретного сервиса (postgres|minio|redis)"
+    echo ""
+    echo "Node.js / Admin Web:"
+    echo "  node-install       Установить/Обновить Node.js (v20)"
+    echo "  node-check         Проверить версию Node.js"
+    echo "  admin-start        Запустить admin-web (dev режим)"
+    echo "  admin-build        Собрать admin-web (production build)"
+    echo ""
     echo "  help               Показать эту справку"
     echo ""
     echo "Примеры:"
@@ -249,6 +316,10 @@ case "${1:-help}" in
     restore)        cmd_restore "$2" ;;
     reset)          cmd_reset ;;
     reset-service)  cmd_reset_service "$2" ;;
+    node-install)   cmd_node_install ;;
+    node-check)     cmd_node_check ;;
+    admin-start)    cmd_admin_start ;;
+    admin-build)    cmd_admin_build ;;
     help|--help|-h) cmd_help ;;
     *)
         log_error "Неизвестная команда: $1"
