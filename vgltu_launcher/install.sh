@@ -297,6 +297,10 @@ ask "CORS_ORIGINS" "http://localhost:5173,http://localhost:3000" \
     "Разрешённые домены для CORS (через запятую)" \
     "CORS_ORIGINS"
 
+ask "VITE_API_URL" "/api" \
+    "URL API для фронтенда (обычно /api если через Nginx, или http://IP:8000)" \
+    "VITE_API_URL"
+
 # ============================================
 # STEP 5: Create .env and Start
 # ============================================
@@ -337,6 +341,12 @@ CORS_ORIGINS=$CORS_ORIGINS
 EOF
 
 log_info "Файл .env создан"
+
+# Create admin-web/.env if directory exists
+if [ -d "admin-web" ]; then
+    echo "VITE_API_URL=$VITE_API_URL" > admin-web/.env
+    log_info "Файл admin-web/.env создан"
+fi
 
 # Make manage.sh executable
 chmod +x manage.sh
@@ -396,9 +406,16 @@ if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
     echo "    ./manage.sh stop      — остановка"
     echo ""
     log_info "Для запуска admin-web (веб-панель):"
+    log_info "Dev режим:"
     echo "  cd admin-web"
     echo "  npm install"
     echo "  npm run dev"
+    echo ""
+    log_info "Production режим (рекомендуется):"
+    echo "  npm run build"
+    echo "  npm install -g serve pm2"
+    echo "  pm2 start \"serve -s dist -l 5173\" --name admin-web"
+    echo "  pm2 save"
     echo ""
     log_hint "Admin-web будет доступна на http://localhost:5173"
     log_hint "Не забудьте настроить CORS_ORIGINS в .env если используете другой хост"

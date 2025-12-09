@@ -139,24 +139,48 @@ node -v
 npm -v
 ```
 
-### Установка зависимостей admin-web
+### Настройка и запуск admin-web (Production)
+
+Для работы в production режиме (стабильно и быстро) используйте PM2.
+
+1. **Настройка окружения**
+
+Создайте файл `.env` в папке `admin-web`:
 
 ```bash
 cd /opt/vgltu_launcher/admin-web
+nano .env
+```
 
-# Установить зависимости
+Добавьте URL API (важно для Nginx):
+```env
+VITE_API_URL=/api
+```
+
+2. **Сборка проекта**
+
+```bash
 npm install
-
-# Запустить dev сервер (для разработки)
-npm run dev
-
-# Или собрать для production
 npm run build
+```
+
+3. **Запуск через PM2**
+
+```bash
+# Установка PM2 и serve глобально
+sudo npm install -g pm2 serve
+
+# Запуск
+pm2 start "serve -s dist -l 5173" --name admin-web
+
+# Сохранение списка процессов (чтобы запускались после перезагрузки)
+pm2 save
+pm2 startup
 ```
 
 ### Настройка CORS для admin-web
 
-После запуска admin-web будет доступна на порту 5173. Добавьте в `.env`:
+После запуска admin-web будет доступна на порту 5173. Добавьте в `.env` (в корне проекта, не в admin-web):
 
 ```env
 CORS_ORIGINS=http://your-server-ip:5173
