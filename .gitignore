@@ -28,3 +28,10 @@ __pycache__/
 Markdown_Mirror.py
 
 vgltu_launcher_backup_20251209_002038/
+.kilocode
+package-lock.json
+.nx/installation
+.nx/cache
+.nx/workspace-data
+nx*
+.nx
