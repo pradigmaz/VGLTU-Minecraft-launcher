@@ -150,6 +150,7 @@ ask "PUBLIC_HOST" "$DETECTED_IP" \
     "PUBLIC_HOST"
 
 ask_generate "POSTGRES_PASSWORD" "Пароль БД" "POSTGRES_PASSWORD" 16
+ask_generate "REDIS_PASSWORD" "Пароль Redis" "REDIS_PASSWORD" 16
 ask_generate "MINIO_ROOT_PASSWORD" "Пароль MinIO (S3)" "MINIO_ROOT_PASSWORD" 16
 ask_generate "SECRET_KEY" "JWT Secret Key" "SECRET_KEY" 32
 ask "BOT_TOKEN" "" "Токен бота от @BotFather" "BOT_TOKEN"
@@ -176,7 +177,7 @@ server {
 
     # Backend API (порт 8000 проброшен из Docker)
     location /api/ {
-        proxy_pass http://localhost:8000/;
+        proxy_pass http://localhost:8000/api/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -185,6 +186,22 @@ server {
         proxy_connect_timeout 600;
         proxy_read_timeout 600;
         send_timeout 600;
+    }
+
+    # Authlib-injector auth server
+    location /authserver/ {
+        proxy_pass http://localhost:8000/authserver/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+    }
+
+    # Authlib-injector session server
+    location /sessionserver/ {
+        proxy_pass http://localhost:8000/sessionserver/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
     }
 
     # MinIO S3 API (порт 9000 проброшен из Docker)

@@ -4,6 +4,10 @@ import electron from 'vite-plugin-electron/simple'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  define: {
+    // API URL инжектится при сборке. Для прода: VITE_API_URL=http://server npm run build
+    __API_URL__: JSON.stringify(process.env.VITE_API_URL || 'http://localhost:8000'),
+  },
   plugins: [
     react(),
     electron({

@@ -14,9 +14,14 @@ const execAsync = util.promisify(exec)
 
 const ROOT_PATH = path.join(app.getPath('appData'), '.pixel-launcher')
 const AUTHLIB_PATH = path.join(ROOT_PATH, 'authlib-injector.jar')
+import { getApiUrl } from './config'
+
 const AUTHLIB_URL = "https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.5/authlib-injector-1.2.5.jar"
-// УБРАН ХАРДКОД ХЕША, чтобы не ломать обновления
-const API_URL = process.env.PIXEL_LAUNCHER_API_URL || "http://localhost:8000" 
+
+// Ленивая загрузка API URL (после app.whenReady)
+function getApiUrlLazy(): string {
+  return getApiUrl()
+} 
 
 const MIRROR_LIST = [
   {
@@ -311,7 +316,7 @@ export class GameManager {
         maxMemory: memory,
         extraJVMArgs: [
           `-Xmx${memory}M`,
-          `-javaagent:${AUTHLIB_PATH}=${API_URL}/authserver`
+          `-javaagent:${AUTHLIB_PATH}=${getApiUrlLazy()}/authserver`
         ],
         extraExecOption: { stdio: ['ignore', 'pipe', 'pipe'] }
       })

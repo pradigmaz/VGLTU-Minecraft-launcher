@@ -5,16 +5,18 @@ import axios from 'axios'
 import os from 'os'
 import fs from 'fs' // Импортируем fs для сохранения конфига
 import { GameManager } from './game-manager'
+import { getApiUrl } from './config'
 
 // ОПТИМИЗАЦИЯ RAM
 app.disableHardwareAcceleration();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.join(app.getPath('userData'), 'profile.json') // Путь к конфигу
+const CONFIG_PATH = path.join(app.getPath('userData'), 'profile.json') // Путь к профилю пользователя
 
-const API_BASE = process.env.PIXEL_LAUNCHER_API_URL || "http://localhost:8000"
-const API_URL = `${API_BASE}/api`
-const AUTH_URL = API_BASE
+// URL загружается лениво после app.whenReady()
+let API_BASE = ''
+let API_URL = ''
+let AUTH_URL = ''
 
 let authData: { username: string; uuid: string; accessToken: string } | null = null
 let mainWindow: BrowserWindow | null = null
@@ -64,6 +66,12 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Инициализируем URL из конфига после готовности app
+  API_BASE = getApiUrl()
+  API_URL = `${API_BASE}/api`
+  AUTH_URL = API_BASE
+  console.log(`🌐 API URL: ${API_BASE}`)
+
   mainWindow = createWindow()
   const gameManager = new GameManager(mainWindow)
 
