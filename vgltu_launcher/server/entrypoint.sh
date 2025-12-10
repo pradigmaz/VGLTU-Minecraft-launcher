@@ -19,6 +19,13 @@ echo "⏳ Waiting for Redis..."
 REDIS_HOST="redis" # Имя сервиса
 REDIS_PORT="6379"
 
+# Отладочная информация
+if [ -n "$REDIS_PASSWORD" ]; then
+  echo "🔐 Redis password is set, using authentication"
+else
+  echo "🔓 Redis password is not set, connecting without auth"
+fi
+
 for i in {1..15}; do 
   
   # Используем переменную окружения REDIS_PASSWORD для аутентификации
@@ -28,12 +35,16 @@ for i in {1..15}; do
     if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then 
       echo "✅ Redis is ready and authenticated!"
       break
+    else
+      echo "🔍 Debug: Redis auth failed, trying to connect..."
     fi
   else
     # Если пароль не задан, подключаемся без аутентификации
     if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1; then 
       echo "✅ Redis is ready!"
       break
+    else
+      echo "🔍 Debug: Redis connection failed without auth..."
     fi
   fi
 
