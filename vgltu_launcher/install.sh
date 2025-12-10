@@ -165,23 +165,18 @@ log_step "Шаг 4/7: Генерация Конфигурации"
 log_info "Генерация Nginx-конфига для $PUBLIC_HOST..."
 cat > nginx/launcher.conf << EOF
 # Базовая конфигурация Nginx для $PUBLIC_HOST
+# Nginx на хосте проксирует на localhost порты Docker контейнеров
 server {
     listen 80;
     server_name $PUBLIC_HOST;
-
-    # КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Используем Docker DNS Resolver
-    resolver 127.0.0.11 valid=30s; 
-    set \$backend_host pixellauncher_backend;
-    set \$minio_host pixellauncher_minio;
-    set \$admin_host pixellauncher_admin_web;
 
     access_log /var/log/nginx/launcher_access.log;
     error_log /var/log/nginx/launcher_error.log;
     client_max_body_size 500M;
 
-    # Backend API
+    # Backend API (порт 8000 проброшен из Docker)
     location /api/ {
-        proxy_pass http://\$backend_host:8000/; 
+        proxy_pass http://localhost:8000/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -192,9 +187,9 @@ server {
         send_timeout 600;
     }
 
-    # MinIO S3 API (Для загрузки файлов)
+    # MinIO S3 API (порт 9000 проброшен из Docker)
     location /storage/ {
-        proxy_pass http://\$minio_host:9000/; 
+        proxy_pass http://localhost:9000/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -205,9 +200,9 @@ server {
         send_timeout 600;
     }
 
-    # Admin Web (React)
+    # Admin Web (порт 5173 проброшен из Docker)
     location / {
-        proxy_pass http://\$admin_host:5173/; 
+        proxy_pass http://localhost:5173/;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -238,25 +233,8 @@ EOF
 # 4.3 Admin-Web .env
 echo "VITE_API_URL=$FRONTEND_URL/api" > admin-web/.env
 
-# 4.4 УДАЛЕНИЕ ПРОБРОСА ПОРТОВ ИЗ docker-compose
-log_info "Удаление пробросов портов 8000/5173 из docker-compose.yml..."
-
-# Удаляем блок 'ports:' и все строки, содержащие 8000 или 5173.
-# Мы предполагаем, что порты 8000 и 5173 проброшены только в backend и admin-web
-# (как это и было в вашем оригинальном файле)
-sudo sed -i '/ports:/,/environment:/ {/ports:/!b; /:8000"/d; /:5173"/d}' docker-compose.yml 2>/dev/null || true
-
-# Более простой и безопасный способ (целевое удаление строк с портами)
-sudo sed -i '/ports:$/N; /\n.*8000:8000/d; /\n.*5173:5173/d; /ports:$/d' docker-compose.yml 2>/dev/null || true
-
-# САМЫЙ простой, если структура YAML чистая:
-# Удалить все строки, содержащие порты и сам блок ports:
-sed -i '/- "8000:8000"/d' docker-compose.yml 2>/dev/null || true
-sed -i '/- "5173:5173"/d' docker-compose.yml 2>/dev/null || true
-# А также пустые 'ports:' (если они есть, что маловероятно, но удалим, если нет подстрок)
-sed -i '/^.*ports:$/ {N; /ports:\n\s*$/d}' docker-compose.yml 2>/dev/null || true 
-
-log_info "Проброс портов удален."
+# 4.4 Проброс портов ОСТАВЛЯЕМ - они нужны для nginx на хосте
+log_info "Порты 8000/5173 проброшены для nginx на хосте."
 
 
 # --------------------------------------------
