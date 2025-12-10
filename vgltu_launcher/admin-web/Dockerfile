@@ -11,6 +11,8 @@ RUN npm run build
 FROM nginx:alpine
 # Удаляем дефолтный конфиг
 RUN rm -rf /etc/nginx/conf.d/*
+# Копируем конфиг nginx для SPA
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 # Копируем собранную статику
 COPY --from=builder /app/dist /usr/share/nginx/html
 # Этот контейнер не запускает Nginx сам в нашем docker-compose (там он builder),
