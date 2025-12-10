@@ -1,426 +1,137 @@
 #!/bin/bash
 
-# Interactive Installer Script
-# Устанавливает Docker, настраивает .env и запускает проект
+# ==========================================
+# PIXEL LAUNCHER - AUTO INSTALLER (v2)
+# ==========================================
 
 set -e
-# set -x  # Uncomment for debugging
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
-
-# Colors
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-CYAN='\033[0;36m'
+RED='\033[0;31m'
 NC='\033[0m'
 
-# Read branding
-if [ -f "branding.json" ]; then
-    APP_NAME=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' branding.json | cut -d'"' -f4)
-else
-    APP_NAME="Launcher"
-fi
-
-# Constants for Node.js
-REQUIRED_NODE_MAJOR=20
-MIN_NODE_VERSION="20.0.0"
-
-echo -e "${CYAN}"
+echo -e "${GREEN}"
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║                                                            ║"
-echo "║       $APP_NAME — Интерактивная установка                  ║"
-echo "║                                                            ║"
+echo "║           Pixel Launcher — Автоматическая установка        ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
-log_info() { echo -e "${GREEN}[✓]${NC} $1"; }
-log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
-log_error() { echo -e "${RED}[✗]${NC} $1"; }
-log_step() { echo -e "\n${BLUE}▶ $1${NC}"; }
-log_hint() { echo -e "  ${CYAN}↳ $1${NC}"; }
+# 1. ОПРЕДЕЛЕНИЕ IP
+DETECTED_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
+echo -e "\n${YELLOW}▶ Шаг 1: Сетевые настройки${NC}"
+echo -n "Введите IP сервера или домен [$DETECTED_IP]: "
+read USER_IP
+if [ -z "$USER_IP" ]; then USER_IP="$DETECTED_IP"; fi
+echo -e "${GREEN}✓ Используем адрес: $USER_IP${NC}"
 
-# Check dependencies
-command -v curl >/dev/null 2>&1 || { log_error "curl не установлен"; exit 1; }
-command -v openssl >/dev/null 2>&1 || log_warn "openssl не найден, генерация паролей может не работать"
-
-ask() {
-    local prompt="$1"
-    local default="$2"
-    local hint="$3"
-    local var_name="$4"
-    local is_secret="${5:-false}"
-
-    echo ""
-    echo -e "${YELLOW}$prompt${NC}"
-    [ -n "$hint" ] && log_hint "$hint"
-    
-    if [ -n "$default" ]; then
-        echo -n "[$default]: "
-    else
-        echo -n ": "
-    fi
-
-    if [ "$is_secret" = "true" ]; then
-        read -s value
-        echo ""
-    else
-        read value
-    fi
-
-    if [ -z "$value" ] && [ -n "$default" ]; then
-        value="$default"
-    fi
-
-    eval "$var_name=\"$value\""
-}
-
-ask_generate() {
-    local prompt="$1"
-    local hint="$2"
-    local var_name="$3"
-    local length="${4:-32}"
-
-    echo ""
-    echo -e "${YELLOW}$prompt${NC}"
-    log_hint "$hint"
-    
-    local generated=$(openssl rand -hex "$length" 2>/dev/null || head -c "$((length*2))" /dev/urandom | xxd -p | tr -d '\n' | head -c "$((length*2))")
-    
-    echo -n "Сгенерировать автоматически? [Y/n]: "
-    read choice
-    
-    if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then
-        echo -n "Введите значение: "
-        read -s value
-        echo ""
-    else
-        value="$generated"
-        log_info "Сгенерировано"
-    fi
-
-    eval "$var_name=\"$value\""
-}
-
-check_node_version() {
-    if command -v node &> /dev/null; then
-        current_version=$(node -v | sed 's/v//')
-        major_version=$(echo "$current_version" | cut -d'.' -f1)
-        
-        if [ "$major_version" -ge "$REQUIRED_NODE_MAJOR" ]; then
-            return 0  # Version OK
-        else
-            return 1  # Version outdated
-        fi
-    else
-        return 2  # Node.js not installed
-    fi
-}
-
-install_nodejs() {
-    log_info "Установка Node.js $REQUIRED_NODE_MAJOR.x..."
-    
-    # Remove old version if exists
-    if command -v node &> /dev/null; then
-        log_info "Удаление старой версии Node.js..."
-        sudo apt remove --purge -y nodejs npm libnode-dev libnode72 2>/dev/null || true
-        sudo apt autoremove -y
-    fi
-    
-    # Clean conflicting files
-    log_info "Очистка старых файлов..."
-    sudo rm -rf /usr/include/node /usr/local/include/node 2>/dev/null || true
-    
-    # Install from NodeSource
-    log_info "Добавление репозитория NodeSource..."
-    curl -fsSL https://deb.nodesource.com/setup_${REQUIRED_NODE_MAJOR}.x | sudo -E bash -
-    
-    log_info "Установка Node.js..."
-    sudo apt-get install -y nodejs
-    
-    # Verify installation
-    if command -v node &> /dev/null; then
-        log_info "Node.js установлен: $(node -v)"
-        log_info "npm установлен: $(npm -v)"
-    else
-        log_error "Не удалось установить Node.js"
-        log_info "Попробуйте установить вручную или используйте nvm"
-    fi
-}
-
-# ============================================
-# STEP 1: Check/Install Docker
-# ============================================
-log_step "Шаг 1/5: Проверка Docker"
-
-if command -v docker &> /dev/null; then
-    log_info "Docker установлен: $(docker --version)"
+# 2. DOCKER
+echo -e "\n${YELLOW}▶ Шаг 2: Проверка Docker${NC}"
+if ! command -v docker &> /dev/null; then
+    echo "Установка Docker..."
+    curl -fsSL https://get.docker.com | sudo sh
+    sudo usermod -aG docker $USER
+    echo -e "${GREEN}✓ Docker установлен${NC}"
 else
-    log_warn "Docker не найден. Установить?"
-    echo -n "[Y/n]: "
-    read install_docker
-    
-    if [ "$install_docker" != "n" ] && [ "$install_docker" != "N" ]; then
-        log_info "Установка Docker через официальный скрипт..."
-        log_hint "Работает на Ubuntu, Debian, Mint, Fedora, CentOS и др."
-        
-        curl -fsSL https://get.docker.com | sudo sh
-        
-        sudo usermod -aG docker $USER
-        log_info "Docker установлен"
-        log_warn "Может потребоваться перелогиниться для работы без sudo"
-    else
-        log_error "Docker обязателен для работы. Установите вручную:"
-        echo "    curl -fsSL https://get.docker.com | sudo sh"
-        exit 1
-    fi
+    echo -e "${GREEN}✓ Docker найден${NC}"
 fi
 
-# Check docker-compose
-if docker compose version &> /dev/null; then
-    log_info "Docker Compose доступен (plugin)"
-elif command -v docker-compose &> /dev/null; then
-    log_info "Docker Compose доступен (standalone)"
-else
-    log_info "Установка Docker Compose..."
-    sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    sudo chmod +x /usr/local/bin/docker-compose
-    log_info "Docker Compose установлен"
-fi
+# 3. КЛЮЧИ
+echo -e "\n${YELLOW}▶ Шаг 3: Генерация ключей${NC}"
+SECRET_KEY=$(openssl rand -hex 32)
+POSTGRES_PASSWORD=$(openssl rand -base64 16)
+MINIO_PASSWORD=$(openssl rand -base64 16)
+REDIS_PASSWORD=$(openssl rand -base64 16)
 
-# ============================================
-# STEP 1.5: Check/Install Node.js
-# ============================================
-log_step "Шаг 1.5/5: Проверка Node.js"
-
-check_node_version
-status=$?
-
-case $status in
-    0)
-        log_info "Node.js установлен: $(node -v)"
-        ;;
-    1)
-        log_warn "Node.js версия $(node -v) устарела. Требуется $MIN_NODE_VERSION+"
-        echo -n "Обновить Node.js? [Y/n]: "
-        read update_node
-        if [ "$update_node" != "n" ] && [ "$update_node" != "N" ]; then
-            install_nodejs
-        else
-            log_error "Node.js $MIN_NODE_VERSION+ необходим для работы admin-web"
-            log_info "Установите вручную: https://nodejs.org/ или используйте nvm"
-            log_warn "Продолжаем без обновления (admin-web может не работать)"
-        fi
-        ;;
-    2)
-        log_warn "Node.js не найден"
-        echo -n "Установить Node.js $REQUIRED_NODE_MAJOR.x LTS? [Y/n]: "
-        read install_node
-        if [ "$install_node" != "n" ] && [ "$install_node" != "N" ]; then
-            install_nodejs
-        else
-            log_warn "Node.js не установлен. Admin-web требует Node.js $MIN_NODE_VERSION+"
-        fi
-        ;;
-esac
-
-# ============================================
-# STEP 2: Telegram Bot Configuration
-# ============================================
-log_step "Шаг 2/5: Настройка Telegram бота"
-
-ask "BOT_TOKEN" "" \
-    "Токен бота от @BotFather (формат: 123456789:ABCdef...)" \
-    "BOT_TOKEN"
+echo -n "Telegram Bot Token: "
+read BOT_TOKEN
+echo -n "Admin Telegram ID: "
+read ADMIN_IDS
 
 if [ -z "$BOT_TOKEN" ]; then
-    log_error "BOT_TOKEN обязателен!"
+    echo -e "${RED}Ошибка: Токен бота обязателен!${NC}"
     exit 1
 fi
 
-ask "BOT_USERNAME" "" \
-    "Username бота без @ (например: my_launcher_bot)" \
-    "BOT_USERNAME"
+# 4. КОНФИГУРАЦИЯ (.env)
+echo -e "\n${YELLOW}▶ Шаг 4: Создание конфигов${NC}"
 
-ask "ADMIN_IDS" "" \
-    "Telegram ID админов (узнать: @userinfobot). Несколько через запятую без пробелов: 123,456,789" \
-    "ADMIN_IDS"
-
-ask "DEVELOPER_CHAT_ID" "$ADMIN_IDS" \
-    "Chat ID для уведомлений об ошибках (обычно = ADMIN_IDS)" \
-    "DEVELOPER_CHAT_ID"
-
-# ============================================
-# STEP 3: Database & Services Passwords
-# ============================================
-log_step "Шаг 3/5: Пароли для сервисов"
-
-echo -e "${CYAN}Сейчас нужно задать пароли для внутренних сервисов.${NC}"
-echo -e "${CYAN}Можно сгенерировать автоматически (рекомендуется).${NC}"
-
-ask_generate "POSTGRES_PASSWORD" \
-    "Пароль для PostgreSQL (база данных)" \
-    "POSTGRES_PASSWORD" 16
-
-ask_generate "REDIS_PASSWORD" \
-    "Пароль для Redis (кэш и сессии)" \
-    "REDIS_PASSWORD" 16
-
-ask_generate "MINIO_ROOT_PASSWORD" \
-    "Пароль для MinIO (S3 хранилище файлов)" \
-    "MINIO_ROOT_PASSWORD" 16
-
-ask_generate "SECRET_KEY" \
-    "Секретный ключ для JWT токенов (64 символа hex)" \
-    "SECRET_KEY" 32
-
-# ============================================
-# STEP 4: Optional Settings
-# ============================================
-log_step "Шаг 4/5: Дополнительные настройки"
-
-ask "POSTGRES_USER" "launcher" \
-    "Имя пользователя PostgreSQL" \
-    "POSTGRES_USER"
-
-ask "POSTGRES_DB" "pixel_launcher" \
-    "Имя базы данных" \
-    "POSTGRES_DB"
-
-ask "MINIO_ROOT_USER" "admin" \
-    "Имя пользователя MinIO" \
-    "MINIO_ROOT_USER"
-
-ask "CORS_ORIGINS" "http://localhost:5173,http://localhost:3000" \
-    "Разрешённые домены для CORS (через запятую)" \
-    "CORS_ORIGINS"
-
-ask "VITE_API_URL" "/api" \
-    "URL API для фронтенда (обычно /api если через Nginx, или http://IP:8000)" \
-    "VITE_API_URL"
-
-# ============================================
-# STEP 5: Create .env and Start
-# ============================================
-log_step "Шаг 5/5: Создание конфигурации и запуск"
-
-# Backup existing .env
-if [ -f ".env" ]; then
-    cp .env ".env.backup.$(date +%Y%m%d_%H%M%S)"
-    log_info "Старый .env сохранён в backup"
-fi
-
-# Create .env
+# Основной .env
 cat > .env << EOF
-# ===== TELEGRAM BOT =====
-BOT_TOKEN=$BOT_TOKEN
-BOT_USERNAME=$BOT_USERNAME
-ADMIN_IDS=$ADMIN_IDS
-DEVELOPER_CHAT_ID=$DEVELOPER_CHAT_ID
-
-# ===== БАЗА ДАННЫХ =====
-POSTGRES_USER=$POSTGRES_USER
+POSTGRES_USER=launcher
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
-POSTGRES_DB=$POSTGRES_DB
-
-# ===== REDIS =====
+POSTGRES_DB=pixel_launcher
 REDIS_PASSWORD=$REDIS_PASSWORD
-
-# ===== MINIO (S3) =====
-MINIO_ROOT_USER=$MINIO_ROOT_USER
-MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
+MINIO_ROOT_USER=admin
+MINIO_ROOT_PASSWORD=$MINIO_PASSWORD
 MINIO_USE_SSL=false
-
-# ===== JWT =====
 SECRET_KEY=$SECRET_KEY
-
-# ===== CORS =====
-CORS_ORIGINS=$CORS_ORIGINS
+BOT_TOKEN=$BOT_TOKEN
+ADMIN_IDS=$ADMIN_IDS
+DEVELOPER_CHAT_ID=$ADMIN_IDS
+CORS_ORIGINS=http://$USER_IP,http://$USER_IP:80,http://localhost:5173
+ADMIN_FRONTEND_URL=http://$USER_IP
 EOF
 
-log_info "Файл .env создан"
+# Admin-Web .env
+echo "VITE_API_URL=http://$USER_IP/api" > admin-web/.env
 
-# Create admin-web/.env if directory exists
-if [ -d "admin-web" ]; then
-    echo "VITE_API_URL=$VITE_API_URL" > admin-web/.env
-    log_info "Файл admin-web/.env создан"
-fi
+# Nginx Config (Dynamic)
+cat > nginx.conf << EOF
+server {
+    listen 80;
+    server_name $USER_IP;
+    client_max_body_size 500M;
+    access_log /var/log/nginx/access.log;
+    
+    # 1. Admin Panel
+    location / {
+        root /var/www/admin;
+        index index.html;
+        try_files \$uri \$uri/ /index.html;
+    }
+    # 2. Backend API
+    location /api/ {
+        proxy_pass http://backend:8000/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+    }
+    # 3. MinIO Files
+    location /objects/ {
+        proxy_pass http://minio:9000/launcher-files/objects/;
+        proxy_set_header Host minio:9000;
+    }
+}
+EOF
 
-# Make manage.sh executable
-chmod +x manage.sh
+echo -e "${GREEN}✓ Конфигурация создана${NC}"
 
+# 5. ЗАПУСК
+echo -e "\n${YELLOW}▶ Шаг 5: Запуск и Инициализация${NC}"
+echo "Остановка старых контейнеров..."
+docker compose down --remove-orphans || true
+
+echo "Сборка и запуск..."
+docker compose up -d --build
+
+echo "⏳ Ожидание запуска Бэкенда (10 сек)..."
+sleep 10
+
+echo "🔧 Автоматическая настройка MinIO (создание бакета + Public Policy)..."
+# ЗАПУСКАЕМ НАШ НОВЫЙ СКРИПТ ВНУТРИ КОНТЕЙНЕРА
+docker compose exec -T backend python tools/init_minio.py || echo -e "${RED}Warning: MinIO init failed${NC}"
+
+# Накат миграций БД
+echo "🗄️ Применение миграций БД..."
+docker compose exec -T backend alembic upgrade head || echo -e "${RED}Warning: Migrations failed${NC}"
+
+echo -e "\n${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}  ║                 УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА                ║${NC}"
+echo -e "${GREEN}  ╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${YELLOW}Запустить сервисы сейчас?${NC}"
-echo -n "[Y/n]: "
-read start_now
-
-if [ "$start_now" != "n" ] && [ "$start_now" != "N" ]; then
-    log_info "Запуск сервисов..."
-    
-    # Determine Docker Compose command
-    DOCKER_COMPOSE_CMD=""
-    
-    if groups | grep -q docker; then
-        # User is in docker group
-        if docker compose version &> /dev/null; then
-             DOCKER_COMPOSE_CMD="docker compose"
-        elif command -v docker-compose &> /dev/null; then
-             DOCKER_COMPOSE_CMD="docker-compose"
-        fi
-    else
-        # User needs sudo
-        # Check if 'docker compose' works with sudo
-        if sudo docker compose version &> /dev/null; then
-             DOCKER_COMPOSE_CMD="sudo docker compose"
-        elif sudo docker-compose version &> /dev/null; then
-             DOCKER_COMPOSE_CMD="sudo docker-compose"
-        fi
-    fi
-
-    if [ -z "$DOCKER_COMPOSE_CMD" ]; then
-        log_error "Не удалось найти работающую команду docker compose (или sudo docker compose)"
-        log_hint "Попробуйте запустить вручную: docker compose up -d"
-    else
-        log_info "Используется команда: $DOCKER_COMPOSE_CMD"
-        $DOCKER_COMPOSE_CMD up -d
-    fi
-    
-    echo ""
-    log_info "Ожидание запуска (10 сек)..."
-    sleep 10
-    
-    echo ""
-    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║                    УСТАНОВКА ЗАВЕРШЕНА                     ║${NC}"
-    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
-    echo ""
-    echo -e "  ${CYAN}Backend API:${NC}     http://localhost:8000"
-    echo -e "  ${CYAN}MinIO Console:${NC}   http://localhost:9001"
-    echo -e "  ${CYAN}Telegram Bot:${NC}    @$BOT_USERNAME"
-    echo ""
-    echo -e "  ${YELLOW}Управление:${NC}"
-    echo "    ./manage.sh status    — статус сервисов"
-    echo "    ./manage.sh logs      — просмотр логов"
-    echo "    ./manage.sh stop      — остановка"
-    echo ""
-    log_info "Для запуска admin-web (веб-панель):"
-    log_info "Dev режим:"
-    echo "  cd admin-web"
-    echo "  npm install"
-    echo "  npm run dev"
-    echo ""
-    log_info "Production режим (рекомендуется):"
-    echo "  npm run build"
-    echo "  npm install -g serve pm2"
-    echo "  pm2 start \"serve -s dist -l 5173\" --name admin-web"
-    echo "  pm2 save"
-    echo ""
-    log_hint "Admin-web будет доступна на http://localhost:5173"
-    log_hint "Не забудьте настроить CORS_ORIGINS в .env если используете другой хост"
-else
-    echo ""
-    log_info "Конфигурация сохранена. Для запуска выполните:"
-    echo "    ./manage.sh start"
-fi
+echo -e "Админка:       http://$USER_IP/admin"
+echo -e "MinIO Console: http://$USER_IP:9001 (User: admin / Pass: $MINIO_PASSWORD)"
+echo ""
+echo -e "${GREEN}✓ Бакет 'launcher-files' создан и настроен автоматически.${NC}"
