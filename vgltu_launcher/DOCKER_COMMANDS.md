@@ -5,37 +5,37 @@
 ### Запуск контейнеров
 ```bash
 # Запустить все сервисы (PostgreSQL, Redis, MinIO, Backend)
-docker-compose up -d
+docker compose up -d
 
 # Запустить с пересборкой backend образа
-docker-compose up -d --build backend
+docker compose up -d --build backend
 
 # Запустить конкретный сервис
-docker-compose up -d backend
-docker-compose up -d postgres
-docker-compose up -d redis
-docker-compose up -d minio
+docker compose up -d backend
+docker compose up -d postgres
+docker compose up -d redis
+docker compose up -d minio
 ```
 
 ### Остановка контейнеров
 ```bash
 # Остановить все сервисы
-docker-compose down
+docker compose down
 
 # Остановить конкретный сервис
-docker-compose stop backend
+docker compose stop backend
 
 # Остановить и удалить volumes (ВНИМАНИЕ: удалит данные!)
-docker-compose down -v
+docker compose down -v
 ```
 
 ### Перезагрузка
 ```bash
 # Перезагрузить backend
-docker-compose restart backend
+docker compose restart backend
 
 # Перезагрузить все сервисы
-docker-compose restart
+docker compose restart
 ```
 
 ## Логи и отладка
@@ -43,24 +43,24 @@ docker-compose restart
 ### Просмотр логов
 ```bash
 # Логи backend (последние 50 строк)
-docker-compose logs backend --tail 50
+docker compose logs backend --tail 50
 
 # Логи backend в реальном времени
-docker-compose logs -f backend
+docker compose logs -f backend
 
 # Логи всех сервисов
-docker-compose logs --tail 50
+docker compose logs --tail 50
 
 # Логи конкретного сервиса в реальном времени
-docker-compose logs -f postgres
-docker-compose logs -f redis
-docker-compose logs -f minio
+docker compose logs -f postgres
+docker compose logs -f redis
+docker compose logs -f minio
 ```
 
 ### Проверка статуса
 ```bash
 # Статус всех контейнеров
-docker-compose ps
+docker compose ps
 
 # Подробная информация о контейнере
 docker inspect pixellauncher_backend
@@ -71,25 +71,25 @@ docker inspect pixellauncher_backend
 ### Выполнение команд внутри контейнера
 ```bash
 # Интерактивный shell в контейнере
-docker-compose exec backend bash
+docker compose exec backend bash
 
 # Выполнить команду
-docker-compose exec backend python -c "import sys; print(sys.version)"
+docker compose exec backend python -c "import sys; print(sys.version)"
 
 # Проверить установленные пакеты
-docker-compose exec backend pip list
+docker compose exec backend pip list
 ```
 
 ### Пересборка образа
 ```bash
 # Пересобрать образ backend
-docker-compose build backend
+docker compose build backend
 
 # Пересобрать без кеша
-docker-compose build --no-cache backend
+docker compose build --no-cache backend
 
 # Пересобрать все образы
-docker-compose build
+docker compose build
 ```
 
 ## Работа с базой данных
