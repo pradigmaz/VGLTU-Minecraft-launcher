@@ -22,17 +22,26 @@ REDIS_PORT="6379"
 for i in {1..15}; do 
   
   # Используем переменную окружения REDIS_PASSWORD для аутентификации
-  # И явно указываем IP и Port. Если PONG получен, аутентификация прошла.
-  if REDIS_PASSWORD="$REDIS_PASSWORD" redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1; then 
-    echo "✅ Redis is ready and authenticated!"
-    break
+  # Проверяем подключение с паролем через флаг -a
+  if [ -n "$REDIS_PASSWORD" ]; then
+    # Если пароль задан, используем его для аутентификации
+    if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then 
+      echo "✅ Redis is ready and authenticated!"
+      break
+    fi
+  else
+    # Если пароль не задан, подключаемся без аутентификации
+    if redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1; then 
+      echo "✅ Redis is ready!"
+      break
+    fi
   fi
 
   echo "Attempt $i/15: Redis not ready yet, waiting..."
   if [ $i -eq 15 ]; then
-  echo "❌ CRITICAL FAILURE: Redis not available after all attempts. Exiting Docker entrypoint."
+    echo "❌ CRITICAL FAILURE: Redis not available after all attempts. Exiting Docker entrypoint."
     exit 1 # Выход с ошибкой.
-fi
+  fi
   sleep 2
 done
 
