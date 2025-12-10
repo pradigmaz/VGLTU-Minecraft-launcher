@@ -191,4 +191,4 @@ sudo certbot --nginx -d your-domain.com
 
 ---
 
-> **Note:** This project is provided "as is". Please ensure you follow the license terms and best security practices when deploying to production.
+> **Примечание:** Проект находится в активной стадии разработки. Возможны изменения в API и структуре базы данных.
