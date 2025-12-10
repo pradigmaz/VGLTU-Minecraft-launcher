@@ -69,7 +69,8 @@ ask_generate() {
         ask "$var_name" "" "$prompt (введите вручную)" "$env_var"
     else
         eval "$env_var=\"$generated_value\""
-fi}
+    fi
+}
 # --------------------------------------------
 # END FUNCTION DEFINITIONS
 # --------------------------------------------
