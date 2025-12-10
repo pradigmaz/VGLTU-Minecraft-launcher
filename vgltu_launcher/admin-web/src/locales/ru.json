@@ -103,9 +103,14 @@
   "vpsGuideStep2": "Перезагрузите ваш Minecraft сервер",
   "vpsGuideStep4": "Введите пароль RCON в настройках выше",
   "whereToFind": "Где найти?",
-  "deleteModalTitle": "Удаление Сборки",
-  "deleteRemoteOption": "Также удалить файлы с игрового сервера (SFTP)",
-  "deleteRemoteWarning": "Внимание: Это навсегда удалит моды, конфиги и скрипты с удаленного сервера.",
-  "confirmDelete": "Удалить навсегда",
-  "deleting": "Удаление..."
+  "settingsAutoSaveWarning": "⚠️ Настройки НЕ сохраняются автоматически. Нажимайте 'Сохранить настройки' после любых изменений.",
+  "deleteModalTitle": "Уничтожение Сборки",
+  "deleteRemoteOption": "Полная зачистка игрового сервера (SFTP)",
+  "deleteRemoteWarning": "ВНИМАНИЕ: Будут безвозвратно удалены папки: /mods, /config, /scripts, /shaderpacks. Игровой мир (world) останется.",
+  "confirmDelete": "Подтвердить удаление",
+  "deleting": "Уничтожение...",
+  "statusConnecting": "Подключение к SFTP...",
+  "statusCleaning": "Удаление файлов на сервере...",
+  "statusDatabase": "Очистка базы данных...",
+  "deleteSuccess": "Сборка и файлы успешно удалены."
 }

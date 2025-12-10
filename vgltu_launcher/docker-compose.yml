@@ -1,3 +1,5 @@
+version: '3.8'
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -10,6 +12,11 @@ services:
       - "5432:5432"
     volumes:
       - ./docker-data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-launcher}"]
+      interval: 5s
+      timeout: 20s
+      retries: 5
     logging:
       driver: "json-file"
       options:
@@ -28,6 +35,11 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
     volumes:
       - ./docker-data/minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 20s
+      retries: 5
     logging:
       driver: "json-file"
       options:
@@ -64,9 +76,12 @@ services:
       ADMIN_IDS: ${ADMIN_IDS}
       DEVELOPER_CHAT_ID: ${DEVELOPER_CHAT_ID}
     depends_on:
-      - postgres
-      - minio
-      - redis
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_started
     logging:
       driver: "json-file"
       options:

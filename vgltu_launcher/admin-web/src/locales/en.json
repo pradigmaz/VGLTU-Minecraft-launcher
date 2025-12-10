@@ -103,9 +103,14 @@
   "vpsGuideStep2": "Restart your Minecraft server",
   "vpsGuideStep4": "Enter the RCON password in the settings above",
   "whereToFind": "Where to find?",
-  "deleteModalTitle": "Delete Instance",
-  "deleteRemoteOption": "Also delete files from game server (SFTP)",
-  "deleteRemoteWarning": "Warning: This will permanently remove mods, configs, and scripts from the remote host.",
-  "confirmDelete": "Delete Forever",
-  "deleting": "Deleting..."
+  "settingsAutoSaveWarning": "⚠️ Settings are NOT saved automatically. Click 'Save Settings' after any changes.",
+  "deleteModalTitle": "Destroy Instance",
+  "deleteRemoteOption": "Full cleanup of remote server (SFTP)",
+  "deleteRemoteWarning": "WARNING: Folders /mods, /config, /scripts, /shaderpacks will be permanently deleted. The world folder will remain.",
+  "confirmDelete": "Confirm Deletion",
+  "deleting": "Destroying...",
+  "statusConnecting": "Connecting to SFTP...",
+  "statusCleaning": "Removing remote files...",
+  "statusDatabase": "Cleaning database...",
+  "deleteSuccess": "Instance and files successfully deleted."
 }

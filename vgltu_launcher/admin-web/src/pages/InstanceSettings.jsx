@@ -285,6 +285,12 @@ export default function InstanceSettings() {
                         </div>
                     </div>
 
+                    {/* WARNING: Auto-save disabled */}
+                    <div className="bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 p-4 rounded-xl flex gap-3 text-amber-900 dark:text-amber-300">
+                        <AlertTriangle className="shrink-0 text-amber-600 dark:text-amber-400 mt-0.5" size={18} />
+                        <p className="text-sm font-medium">{t('settingsAutoSaveWarning')}</p>
+                    </div>
+
                     {/* SFTP */}
                     <div className="bg-surface border border-border rounded-xl shadow-sm overflow-hidden">
                         <div className="bg-black/5 dark:bg-white/5 px-6 py-4 border-b border-border flex items-center justify-between">

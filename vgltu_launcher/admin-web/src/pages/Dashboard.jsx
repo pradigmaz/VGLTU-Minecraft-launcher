@@ -1,18 +1,49 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Box, Settings, Layers, Loader2, Cpu, AlertTriangle, HardDrive } from 'lucide-react';
+import { Plus, Trash2, Box, Settings, Layers, Loader2, Cpu, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import api from '../lib/api';
+
+// Функция для русских склонений
+const pluralize = (count, forms) => {
+  let mod = count % 100;
+  if (mod >= 11 && mod <= 19) return forms[2];
+  mod = count % 10;
+  if (mod === 1) return forms[0];
+  if (mod >= 2 && mod <= 4) return forms[1];
+  return forms[2];
+};
+
+// Компонент уведомления (Toast)
+const Toast = ({ message, type, onClose }) => {
+    useEffect(() => {
+        const timer = setTimeout(onClose, 3000);
+        return () => clearTimeout(timer);
+    }, [onClose]);
+
+    return (
+        <div className={`fixed bottom-6 right-6 z-[60] px-4 py-3 rounded-lg shadow-lg flex items-center gap-3 animate-in slide-in-from-bottom-5 duration-300 ${
+            type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+        }`}>
+            {type === 'success' ? <CheckCircle2 size={18} /> : <AlertTriangle size={18} />}
+            <span className="font-medium">{message}</span>
+        </div>
+    );
+};
 
 export default function Dashboard() {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
-  const { t } = useLanguage();
+  const { t, lang } = useLanguage();
 
-  // Состояние модального окна удаления
+  // Состояние удаления
   const [deleteModal, setDeleteModal] = useState({ open: false, id: null, title: '' });
   const [cleanupRemote, setCleanupRemote] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Визуализация процесса (idle, processing, success, error)
+  const [deleteStatus, setDeleteStatus] = useState('idle'); 
+  const [currentStep, setCurrentStep] = useState(''); // Text description
+  const [toast, setToast] = useState(null);
 
   const fetchInstances = () => {
     setLoading(true);
@@ -26,27 +57,45 @@ export default function Dashboard() {
     fetchInstances();
   }, []);
 
-  // Открытие модалки
   const openDeleteModal = (inst) => {
       setDeleteModal({ open: true, id: inst.id, title: inst.title });
-      setCleanupRemote(false); // Сброс чекбокса по умолчанию
+      setCleanupRemote(false);
+      setDeleteStatus('idle');
   };
 
-  // Выполнение удаления
   const handleConfirmDelete = async () => {
     if (!deleteModal.id) return;
     
-    setIsDeleting(true);
+    setDeleteStatus('processing');
+    
     try {
-      // Отправляем параметр cleanup_remote
+      // 1. Эмуляция этапа подключения (UX)
+      if (cleanupRemote) {
+          setCurrentStep(t('statusConnecting'));
+          await new Promise(r => setTimeout(r, 600)); // Fake delay for UX
+          
+          setCurrentStep(t('statusCleaning'));
+      } else {
+          setCurrentStep(t('statusDatabase'));
+      }
+
+      // 2. Реальный запрос
       await api.delete(`/admin/instances/${deleteModal.id}?cleanup_remote=${cleanupRemote}`);
       
-      // Закрываем всё и обновляем список
-      setDeleteModal({ open: false, id: null, title: '' });
-      fetchInstances();
+      // 3. Успех
+      setCurrentStep(t('deleteSuccess'));
+      setDeleteStatus('success');
+      setToast({ message: t('deleteSuccess'), type: 'success' });
+      
+      // Закрытие через 1 сек
+      setTimeout(() => {
+          setDeleteModal({ open: false, id: null, title: '' });
+          fetchInstances();
+      }, 1000);
+
     } catch (e) {
-      alert(e.response?.data?.detail || e.message);
-      setIsDeleting(false);
+      setDeleteStatus('idle'); // Вернуть форму
+      setToast({ message: e.response?.data?.detail || e.message, type: 'error' });
     }
   };
 
@@ -59,7 +108,7 @@ export default function Dashboard() {
           </div>
           <div>
             <h1 className="text-3xl font-bold text-text">{t('dashboard')}</h1>
-            <p className="text-sm text-muted">{t('dashboardSubtitle') || "Server & Instance Management"}</p>
+            <p className="text-sm text-muted">{t('dashboardSubtitle')}</p>
           </div>
         </div>
         
@@ -83,7 +132,6 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {instances.map((inst) => (
             <div key={inst.id} className="group relative bg-surface border border-border rounded-2xl p-6 transition-all hover:shadow-xl hover:shadow-blue-500/5 hover:border-blue-500/30 overflow-hidden">
-              
               <div className="absolute -top-6 -right-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity rotate-12">
                 <Box size={140} className="text-text" />
               </div>
@@ -105,7 +153,7 @@ export default function Dashboard() {
                 <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
                   <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 p-2 rounded-lg border border-border">
                       <Box size={16} className="text-blue-500" />
-                      <span className="text-text">{inst.files_count || 0} {t('files') || 'Files'}</span>
+                      <span className="text-text">{inst.files_count || 0} {lang === 'ru' ? pluralize(inst.files_count || 0, ['файл', 'файла', 'файлов']) : t('files')}</span>
                   </div>
                   <div className="flex items-center gap-2 bg-black/5 dark:bg-white/5 p-2 rounded-lg border border-border">
                       <Cpu size={16} className="text-purple-500" />
@@ -139,69 +187,82 @@ export default function Dashboard() {
       {deleteModal.open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-surface border border-border rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-                <div className="flex items-center gap-4 mb-4 text-red-600 dark:text-red-500">
-                    <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
-                        <AlertTriangle size={32} />
-                    </div>
-                    <div>
-                        <h3 className="text-xl font-bold">{t('deleteModalTitle')}</h3>
-                        <p className="text-sm text-text opacity-80">{deleteModal.title}</p>
-                    </div>
-                </div>
                 
-                <p className="text-muted mb-6 leading-relaxed">
-                    {t('deleteConfirm')}
-                </p>
-
-                {/* Cleanup Checkbox */}
-                <div className="mb-6 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-border">
-                    <label className="flex items-start gap-3 cursor-pointer group">
-                        <input 
-                            type="checkbox" 
-                            checked={cleanupRemote}
-                            onChange={e => setCleanupRemote(e.target.checked)}
-                            className="mt-1 accent-red-600 w-5 h-5 rounded border-gray-300"
-                        />
-                        <div>
-                            <span className="font-bold text-text block group-hover:text-red-600 transition-colors">
-                                {t('deleteRemoteOption')}
-                            </span>
-                            <span className="text-xs text-muted block mt-1">
-                                {t('deleteRemoteWarning')}
-                            </span>
+                {/* STATE: PROCESSING / SUCCESS */}
+                {deleteStatus === 'processing' || deleteStatus === 'success' ? (
+                   <div className="flex flex-col items-center justify-center py-8 text-center">
+                       {deleteStatus === 'success' ? (
+                           <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400 rounded-full flex items-center justify-center mb-4 animate-in zoom-in duration-300">
+                               <CheckCircle2 size={32} />
+                           </div>
+                       ) : (
+                           <div className="relative mb-4">
+                               <Loader2 size={48} className="text-blue-500 animate-spin" />
+                           </div>
+                       )}
+                       
+                       <h3 className="text-xl font-bold text-text mb-2">{t('deleting')}</h3>
+                       <p className="text-sm text-muted animate-pulse">{currentStep}</p>
+                   </div>
+                ) : (
+                   /* STATE: CONFIRMATION FORM */
+                   <>
+                        <div className="flex items-center gap-4 mb-4 text-red-600 dark:text-red-500">
+                            <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                                <AlertTriangle size={32} />
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-bold">{t('deleteModalTitle')}</h3>
+                                <p className="text-sm text-text opacity-80">{deleteModal.title}</p>
+                            </div>
                         </div>
-                    </label>
-                </div>
+                        
+                        <p className="text-muted mb-6 leading-relaxed">
+                            {t('deleteConfirm')}
+                        </p>
 
-                <div className="flex justify-end gap-3">
-                    <button 
-                        onClick={() => setDeleteModal({ open: false, id: null, title: '' })}
-                        disabled={isDeleting}
-                        className="px-5 py-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text font-medium transition-colors"
-                    >
-                        {t('cancel')}
-                    </button>
-                    <button 
-                        onClick={handleConfirmDelete}
-                        disabled={isDeleting}
-                        className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-all shadow-lg shadow-red-500/20 flex items-center gap-2"
-                    >
-                        {isDeleting ? (
-                            <>
-                                <Loader2 size={18} className="animate-spin" />
-                                {t('deleting')}
-                            </>
-                        ) : (
-                            <>
+                        {/* Cleanup Checkbox */}
+                        <div className="mb-6 p-4 bg-red-50 dark:bg-red-900/10 rounded-xl border border-red-100 dark:border-red-900/30">
+                            <label className="flex items-start gap-3 cursor-pointer group">
+                                <input 
+                                    type="checkbox" 
+                                    checked={cleanupRemote}
+                                    onChange={e => setCleanupRemote(e.target.checked)}
+                                    className="mt-1 accent-red-600 w-5 h-5 rounded border-gray-300"
+                                />
+                                <div>
+                                    <span className="font-bold text-text block group-hover:text-red-600 transition-colors">
+                                        {t('deleteRemoteOption')}
+                                    </span>
+                                    <span className="text-xs text-red-600/80 dark:text-red-400 block mt-1">
+                                        {t('deleteRemoteWarning')}
+                                    </span>
+                                </div>
+                            </label>
+                        </div>
+
+                        <div className="flex justify-end gap-3">
+                            <button 
+                                onClick={() => setDeleteModal({ open: false, id: null, title: '' })}
+                                className="px-5 py-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text font-medium transition-colors"
+                            >
+                                {t('cancel')}
+                            </button>
+                            <button 
+                                onClick={handleConfirmDelete}
+                                className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-all shadow-lg shadow-red-500/20 flex items-center gap-2"
+                            >
                                 <Trash2 size={18} />
                                 {t('confirmDelete')}
-                            </>
-                        )}
-                    </button>
-                </div>
+                            </button>
+                        </div>
+                   </>
+                )}
             </div>
         </div>
       )}
+      
+      {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
     </div>
   );
 }
