@@ -14,16 +14,16 @@ for i in {1..30}; do
   sleep 2
 done
 
-# 2. ОЖИДАНИЕ REDIS (Устранение проблемы с аутентификацией)
+# 2. ОЖИДАНИЕ REDIS (Устранение проблемы с экранированием)
 echo "⏳ Waiting for Redis..."
 REDIS_HOST="redis" # Имя сервиса
-# Используем команду printf для передачи аутентификации и PING
-REDIS_CONNECT_CMD='printf "AUTH $REDIS_PASSWORD\r\nPING\r\n" | redis-cli -h $REDIS_HOST'
+REDIS_PORT="6379"
 
-for i in {1..15}; do # 15 попыток по 2 секунды
-  # Выполняем команду аутентификации и ping. Ищем "PONG" в ответе.
-  # Мы используем bash-скрипт для исполнения, чтобы правильно обработать REDIS_PASSWORD
-  if bash -c "$REDIS_CONNECT_CMD" | grep PONG > /dev/null 2>&1; then 
+for i in {1..15}; do 
+  
+  # Используем переменную окружения REDIS_PASSWORD для аутентификации
+  # И явно указываем IP и Port. Если PONG получен, аутентификация прошла.
+  if REDIS_PASSWORD="$REDIS_PASSWORD" redis-cli -h "$REDIS_HOST" -p "$REDIS_PORT" ping > /dev/null 2>&1; then 
     echo "✅ Redis is ready and authenticated!"
     break
   fi
