@@ -78,6 +78,7 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
+      STORAGE_BASE_URL: ${STORAGE_BASE_URL:-http://localhost:9000/pixellauncher-storage}
       SECRET_KEY: ${SECRET_KEY}
       ADMIN_IDS: ${ADMIN_IDS}
       DEVELOPER_CHAT_ID: ${DEVELOPER_CHAT_ID}
