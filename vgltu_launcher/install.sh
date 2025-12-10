@@ -240,7 +240,23 @@ echo "VITE_API_URL=$FRONTEND_URL/api" > admin-web/.env
 
 # 4.4 УДАЛЕНИЕ ПРОБРОСА ПОРТОВ ИЗ docker-compose
 log_info "Удаление пробросов портов 8000/5173 из docker-compose.yml..."
-sed -i '/backend:/,/^[^ ]/ {/ports:/,/^[^ ]/ {/^.*:8000"$/d; /^.*:5173"$/d}}' docker-compose.yml 2>/dev/null || true
+
+# Удаляем блок 'ports:' и все строки, содержащие 8000 или 5173.
+# Мы предполагаем, что порты 8000 и 5173 проброшены только в backend и admin-web
+# (как это и было в вашем оригинальном файле)
+sudo sed -i '/ports:/,/environment:/ {/ports:/!b; /:8000"/d; /:5173"/d}' docker-compose.yml 2>/dev/null || true
+
+# Более простой и безопасный способ (целевое удаление строк с портами)
+sudo sed -i '/ports:$/N; /\n.*8000:8000/d; /\n.*5173:5173/d; /ports:$/d' docker-compose.yml 2>/dev/null || true
+
+# САМЫЙ простой, если структура YAML чистая:
+# Удалить все строки, содержащие порты и сам блок ports:
+sed -i '/- "8000:8000"/d' docker-compose.yml 2>/dev/null || true
+sed -i '/- "5173:5173"/d' docker-compose.yml 2>/dev/null || true
+# А также пустые 'ports:' (если они есть, что маловероятно, но удалим, если нет подстрок)
+sed -i '/^.*ports:$/ {N; /ports:\n\s*$/d}' docker-compose.yml 2>/dev/null || true 
+
+log_info "Проброс портов удален."
 
 
 # --------------------------------------------
