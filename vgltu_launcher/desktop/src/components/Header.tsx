@@ -50,7 +50,7 @@ export const Header = ({
         </div>
         <div>
           <h1 style={{ margin: 0, fontSize: '1.2rem', lineHeight: 1 }}>Pixel Launcher</h1>
-          <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>v3.2 Stable</span>
+          <span style={{ fontSize: '0.8rem', color: 'var(--text-dim)' }}>v0.0.7 Stable</span>
         </div>
       </div>
 

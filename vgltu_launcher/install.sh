@@ -173,7 +173,12 @@ server {
 
     access_log /var/log/nginx/launcher_access.log;
     error_log /var/log/nginx/launcher_error.log;
-    client_max_body_size 500M;
+    
+    # Увеличенные лимиты для загрузки больших сборок
+    client_max_body_size 2G;
+    proxy_read_timeout 1800;
+    proxy_connect_timeout 1800;
+    proxy_send_timeout 1800;
 
     # Backend API (порт 8000 проброшен из Docker)
     location /api/ {

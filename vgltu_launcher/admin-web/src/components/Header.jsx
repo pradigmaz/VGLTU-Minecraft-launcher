@@ -17,7 +17,7 @@ export default function Header({ onLogout }) {
           <h1 className="text-xl font-bold text-text leading-tight">
             Pixel Admin
           </h1>
-          <p className="text-xs text-muted font-medium">v3.2 Stable</p>
+          <p className="text-xs text-muted font-medium">v1.0.0 Stable</p>
         </div>
       </div>
 
