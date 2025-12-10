@@ -91,12 +91,12 @@ chmod +x install.sh
 
 | Действие | Команда |
 |----------|---------|
-| **Запуск** | `docker-compose up -d` |
-| **Остановка** | `docker-compose stop` |
-| **Перезапуск** | `docker-compose restart` |
-| **Статус** | `docker-compose ps` |
-| **Логи** | `docker-compose logs -f [service]` (backend, bot, admin-web) |
-| **Полный сброс** | `docker-compose down -v` (⚠️ Удалит все данные!) |
+| **Запуск** | `docker compose up -d` |
+| **Остановка** | `docker compose stop` |
+| **Перезапуск** | `docker compose restart` |
+| **Статус** | `docker compose ps` |
+| **Логи** | `docker compose logs -f [service]` (backend, bot, admin-web) |
+| **Полный сброс** | `docker compose down -v` (⚠️ Удалит все данные!) |
 
 > Подробнее о командах Docker читайте в [DOCKER_COMMANDS.md](DOCKER_COMMANDS.md).
 
