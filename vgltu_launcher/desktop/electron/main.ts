@@ -2,16 +2,16 @@ import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import { fileURLToPath } from 'node:url'
 import path from 'path'
 import axios from 'axios'
-import os from 'os' 
+import os from 'os'
+import fs from 'fs' // Импортируем fs для сохранения конфига
 import { GameManager } from './game-manager'
 
-// ОПТИМИЗАЦИЯ RAM: Отключаем аппаратное ускорение
-// Лаунчеру не нужна видеокарта, это экономит ~100 МБ памяти сразу.
+// ОПТИМИЗАЦИЯ RAM
 app.disableHardwareAcceleration();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const CONFIG_PATH = path.join(app.getPath('userData'), 'profile.json') // Путь к конфигу
 
-// Конфигурация API (можно переопределить через env)
 const API_BASE = process.env.PIXEL_LAUNCHER_API_URL || "http://localhost:8000"
 const API_URL = `${API_BASE}/api`
 const AUTH_URL = API_BASE
@@ -30,10 +30,10 @@ function createWindow() {
       nodeIntegration: false
     },
     autoHideMenuBar: true,
-    show: false // ОПТИМИЗАЦИЯ: Не показываем белое окно во время загрузки
+    show: false
   })
 
-  // CSP для защиты от XSS
+  // CSP
   win.webContents.session.webRequest.onHeadersReceived((details, callback) => {
     callback({
       responseHeaders: {
@@ -56,7 +56,6 @@ function createWindow() {
     win.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 
-  // Показываем окно только когда интерфейс отрисовался
   win.once('ready-to-show', () => {
     win.show()
   })
@@ -66,25 +65,20 @@ function createWindow() {
 
 app.whenReady().then(() => {
   mainWindow = createWindow()
-  
-  // Передаем окно в менеджер для "Stealth Mode" (скрытия при игре)
   const gameManager = new GameManager(mainWindow)
 
-  // 1. SYSTEM INFO
   ipcMain.handle('get-system-info', () => {
     return {
       totalRam: Math.floor(os.totalmem() / 1024 / 1024)
     }
   })
 
-  // 2. OPEN LINKS
   ipcMain.handle('open-external', async (_event, url) => {
       if (url.startsWith('http://') || url.startsWith('https://')) {
           await shell.openExternal(url)
       }
   })
 
-  // 3. GET INSTANCES
   ipcMain.handle('get-instances', async () => {
      try {
        const res = await axios.get(`${API_URL}/client/instances`)
@@ -97,22 +91,49 @@ app.whenReady().then(() => {
      }
   })
 
-  // 4. LOGIN
+  // --- LOGIN LOGIC UPDATE ---
   ipcMain.handle('login', async (_event, username: string, _password: string) => {
     try {
       gameManager.log(`🔐 Attempting login for ${username}...`)
-      const fakeTgId = Math.floor(Math.random() * 1000000)
       
+      let telegramId: number;
+
+      // 1. Пытаемся загрузить ID из файла
+      try {
+        if (fs.existsSync(CONFIG_PATH)) {
+            const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
+            if (config.username === username && config.telegramId) {
+                telegramId = config.telegramId;
+                gameManager.log(`📂 Found saved profile for ID: ${telegramId}`);
+            } else {
+                throw new Error("New user");
+            }
+        } else {
+            throw new Error("No config");
+        }
+      } catch (err) {
+        // 2. Если файла нет или юзер другой -> генерируем новый ID
+        telegramId = Math.floor(Math.random() * 10000000);
+        gameManager.log(`🆕 Generating new ID: ${telegramId}`);
+        
+        // Сохраняем новый ID
+        fs.writeFileSync(CONFIG_PATH, JSON.stringify({ username, telegramId }));
+      }
+      
+      // 3. Регистрируем/Обновляем пользователя на бэке
       try {
         await axios.post(`${AUTH_URL}/api/dev/create_user`, {
             username: username,
-            telegram_id: fakeTgId 
+            telegram_id: telegramId 
         })
-      } catch (err) { }
+      } catch (err) { 
+          // Игнорируем ошибку "пользователь уже существует"
+      }
 
+      // 4. Авторизуемся
       const res = await axios.post(`${AUTH_URL}/authserver/authenticate`, {
         username,
-        password: "dummy_password",
+        password: "dummy_password", // Это ок для dev-режима
         agent: { name: "Minecraft", version: 1 }
       })
       
@@ -131,7 +152,6 @@ app.whenReady().then(() => {
     }
   })
 
-  // 5. LAUNCH
   ipcMain.handle('launch-game', async (_event, instanceId, ram) => {
     try {
       if (!authData) {

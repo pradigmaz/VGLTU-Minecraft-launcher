@@ -29,19 +29,24 @@ FILES_TO_PROCESS = [
     "desktop/build/installer.nsh",
     "desktop/src/renderer/src/App.jsx",
     "desktop/src/main/index.js",
+    "desktop/electron-builder.json5",
     "admin-web/src/components/Header.jsx",
     "admin-web/src/pages/Login.jsx",
     "admin-web/index.html",
+    "admin-web/Dockerfile",
     "server/app/main.py",
     "server/app/routes/yggdrasil.py",
     "server/app/routes/admin.py",
     "server/app/routes/client.py",
+    "server/tools/gc_minio.py",
     "telegram-bot/bot.py",
     "docker-compose.yml",
     ".env",
     ".env.example",
     "README.md",
     "DOCKER_COMMANDS.md",
+    ".github/workflows/deploy-server.yml",
+    ".github/workflows/release-desktop.yml"
 ]
 
 def slugify(name: str) -> str:

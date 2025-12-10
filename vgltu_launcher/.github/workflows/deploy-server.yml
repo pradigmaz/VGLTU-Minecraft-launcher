@@ -1,0 +1,84 @@
+name: Deploy Server Infrastructure
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'server/**'
+      - 'admin-web/**'
+      - 'docker-compose.yml'
+      - 'nginx/**'
+
+env:
+  REGISTRY: ghcr.io
+  # Замените на ваше имя пользователя/организации в нижнем регистре
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # --- СБОРКА BACKEND ---
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          file: ./server/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
+
+      # --- СБОРКА ADMIN WEB ---
+      - name: Build and push Admin Web
+        uses: docker/build-push-action@v5
+        with:
+          context: ./admin-web
+          file: ./admin-web/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/admin-web:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          script: |
+            # Переходим в папку проекта
+            cd /opt/faculty-launcher
+            
+            # Логинимся в реестр (чтобы скачать приватные образы)
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            
+            # Обновляем код (docker-compose.yml, nginx conf)
+            git pull origin main
+            
+            # Скачиваем свежие образы
+            docker compose pull
+            
+            # Перезапускаем контейнеры (только те, что обновились)
+            docker compose up -d
+            
+            # Чистим старые образы (чтобы диск не забился)
+            docker image prune -f
+            
+            # Накатываем миграции БД (КРИТИЧНО ВАЖНО)
+            docker compose exec -T backend alembic upgrade head

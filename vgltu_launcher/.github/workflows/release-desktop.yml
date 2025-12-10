@@ -1,0 +1,59 @@
+name: Build Desktop Client
+
+on:
+  push:
+    tags:
+      - 'v*' # Срабатывает на теги v1.0.0, v2.3.1 и т.д.
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: Install Dependencies
+        working-directory: ./desktop
+        run: npm ci
+
+      - name: Build Electron App
+        working-directory: ./desktop
+        env:
+          # Ссылка на API должна быть зашита при сборке!
+          VITE_API_URL: https://launcher.faculty.ru
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run build
+
+      # --- ЗАГРУЗКА В MINIO ---
+      # Используем официальный клиент MinIO (mc)
+      - name: Upload to MinIO
+        shell: bash
+        env:
+          MINIO_URL: https://launcher.faculty.ru/objects # Или api.faculty.ru, смотря как настроен Nginx
+          MINIO_KEY: ${{ secrets.MINIO_ACCESS_KEY }}
+          MINIO_SECRET: ${{ secrets.MINIO_SECRET_KEY }}
+          BUCKET: faculty-releases
+        run: |
+          # Скачиваем mc
+          curl https://dl.min.io/client/mc/release/windows-amd64/mc.exe -o mc.exe
+          
+          # Настраиваем алиас
+          ./mc.exe alias set myminio $MINIO_URL $MINIO_KEY $MINIO_SECRET
+          
+          # Получаем имя версии из тега (v1.0.0 -> 1.0.0)
+          VERSION=${GITHUB_REF#refs/tags/v}
+          
+          # Загружаем файлы из папки release
+          # Обычно electron-builder кладет их в desktop/release/{version} или просто desktop/release
+          ./mc.exe cp --recursive ./desktop/release/ myminio/$BUCKET/$VERSION/
+          
+          # Обновляем latest.yml в корне бакета (для автообновления)
+          ./mc.exe cp ./desktop/release/latest.yml myminio/$BUCKET/latest.yml

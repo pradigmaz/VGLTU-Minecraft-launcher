@@ -1,14 +1,14 @@
 from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, Body, Path, Query
 from fastapi.responses import PlainTextResponse
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete, or_, func
+from sqlalchemy import select, delete, or_, func, update
 from starlette.concurrency import run_in_threadpool
 from app.database import async_session_factory, minio_client
 from app.models import Instance, File as FileModel, instance_files, User, SideType
 from app.utils import calculate_sha256, validate_uploaded_archive, get_current_admin, generate_instance_id, get_db, validate_instance_id, validate_file_path
 import rarfile
-from app.schemas import AdminInstanceView, FileNode, ConfigUpdateRequest
-from app.services.sftp_sync import SFTPSyncService  # <--- IMPORTED
+from app.schemas import AdminInstanceView, FileNode, ConfigUpdateRequest, FileUpdateSide
+from app.services.sftp_sync import SFTPSyncService
 from typing import List
 from pydantic import BaseModel
 import zipfile
@@ -21,14 +21,11 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/admin", tags=["Admin"])
 BUCKET_NAME = os.getenv("MINIO_BUCKET", "launcher-files")
 
-# ХЕЛПЕР ДЛЯ ЛЕЧЕНИЯ КОДИРОВКИ
 def decode_archive_filename(filename: str, archive_type: str) -> str:
     try:
         if archive_type == 'zip':
-            # ZIP стандартно использует CP437
             return filename.encode('cp437').decode('cp866')
         else:
-            # RAR обычно использует UTF-8 или системную кодировку
             return filename
     except:
         return filename
@@ -38,7 +35,6 @@ async def get_admin_instances(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin) 
 ):
-    # JOIN с подсчётом файлов
     stmt = (
         select(Instance, func.count(instance_files.c.file_hash).label("files_count"))
         .outerjoin(instance_files, Instance.id == instance_files.c.instance_id)
@@ -58,29 +54,23 @@ async def get_admin_instances(
 @router.delete("/instances/{instance_id}")
 async def delete_instance(
     instance_id: str = Path(..., regex=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", min_length=3, max_length=50),
-    cleanup_remote: bool = Query(False, description="Удалить файлы с игрового сервера (SFTP)"), # <--- NEW PARAM
+    cleanup_remote: bool = Query(False),
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    logger.info(f"Deleting instance: {instance_id}, cleanup_remote={cleanup_remote}")
     stmt = select(Instance).where(Instance.id == instance_id)
     instance = (await db.execute(stmt)).scalars().first()
     
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
 
-    # --- REMOTE CLEANUP ---
     if cleanup_remote:
-        # Пытаемся почистить удаленный сервер, пока настройки SFTP еще живы
         try:
-            logger.info("Initiating remote cleanup...")
             sync_service = SFTPSyncService(db)
             await sync_service.cleanup_instance(instance_id)
         except Exception as e:
-            # Логируем, но не прерываем удаление инстанса (fail-safe)
-            logger.error(f"Remote cleanup failed, but proceeding with local deletion: {e}")
+            logger.error(f"Remote cleanup failed: {e}")
 
-    # --- LOCAL DELETION ---
     await db.execute(
         instance_files.delete().where(instance_files.c.instance_id == instance_id)
     )
@@ -91,30 +81,19 @@ async def delete_instance(
     ).where(instance_files.c.instance_id == None)
     
     orphans = (await db.execute(orphan_stmt)).scalars().all()
-    
     deleted_files_count = 0
     deleted_size_bytes = 0
 
     for file_obj in orphans:
         try:
             await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, file_obj.s3_path)
-        except Exception as e:
-            logger.warning(f"MinIO delete warning for {file_obj.s3_path}: {e}")
+        except: pass
         await db.delete(file_obj)
         deleted_files_count += 1
         deleted_size_bytes += file_obj.size
 
     await db.commit()
-    return {
-        "status": "deleted",
-        "instance_id": instance_id,
-        "remote_cleanup": cleanup_remote,
-        "gc_stats": {
-            "orphaned_files_removed": deleted_files_count,
-            "space_freed_mb": round(deleted_size_bytes / 1024 / 1024, 2)
-        }
-    }
-
+    return {"status": "deleted", "gc_stats": {"files": deleted_files_count, "mb": round(deleted_size_bytes/1024/1024, 2)}}
 @router.post("/upload-zip")
 async def upload_instance_zip(
     file: UploadFile = File(...),
@@ -124,187 +103,126 @@ async def upload_instance_zip(
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    # Генерируем ID автоматически
     instance_id = generate_instance_id(title, mc_version)
-    logger.info(f"Start processing archive for {instance_id}")
-    
     archive_buffer, archive_type = await validate_uploaded_archive(file)
     
     stmt = select(Instance).where(Instance.id == instance_id)
-    instance = (await db.execute(stmt)).scalars().first()
-    
-    if not instance:
-        instance = Instance(id=instance_id, title=title, mc_version=mc_version, loader_type=loader_type)
-        db.add(instance)
+    if not (await db.execute(stmt)).scalars().first():
+        db.add(Instance(id=instance_id, title=title, mc_version=mc_version, loader_type=loader_type))
     else:
         await db.execute(instance_files.delete().where(instance_files.c.instance_id == instance_id))
     
     await db.flush()
 
-    processed_count = 0
-    skipped_count = 0
-    uploaded_s3_paths = []
+    processed = 0
+    skipped = 0
+    uploaded_paths = []
 
     try:
-        # Универсальная обработка ZIP и RAR
-        if archive_type == 'zip':
-            archive_obj = zipfile.ZipFile(archive_buffer)
-            file_list = archive_obj.infolist()
-        else:  # rar
-            archive_obj = rarfile.RarFile(archive_buffer)
-            file_list = archive_obj.infolist()
-        
+        archive_obj = zipfile.ZipFile(archive_buffer) if archive_type == 'zip' else rarfile.RarFile(archive_buffer)
         with archive_obj:
-            for file_info in file_list:
-                # Проверка на директорию
-                if archive_type == 'zip' and file_info.is_dir():
-                    continue
-                if archive_type == 'rar' and file_info.isdir():
-                    continue
-                
-                # Декодирование имени
+            for file_info in archive_obj.infolist():
+                is_dir = file_info.is_dir() if archive_type == 'zip' else file_info.isdir()
+                if is_dir: continue
                 fixed_filename = decode_archive_filename(file_info.filename, archive_type)
-                logger.debug(f"Found in {archive_type.upper()}: '{file_info.filename}' -> Decoded: '{fixed_filename}'")
+                if not validate_file_path(fixed_filename): continue
+                if "__MACOSX" in fixed_filename or ".DS_Store" in fixed_filename: continue
 
-                # Безопасность: полная проверка path traversal
-                if not validate_file_path(fixed_filename):
-                    logger.warning(f"SKIPPED (Security): '{fixed_filename}'")
-                    continue
-                
-                if fixed_filename.startswith("__MACOSX") or fixed_filename.endswith(".DS_Store"):
-                    logger.debug(f"SKIPPED (Junk): '{fixed_filename}'")
-                    continue
-
-                # === УМНАЯ ЛОГИКА СТОРОН (ДОПОЛНЕННАЯ) ===
+                # === SIDE LOGIC ===
                 side = SideType.BOTH
                 final_path = fixed_filename
-                # 1. Явные папки в архиве
                 if fixed_filename.startswith("client-mods/"):
                     side = SideType.CLIENT
                     final_path = fixed_filename.replace("client-mods/", "mods/", 1)
                 elif fixed_filename.startswith("server-mods/"):
                     side = SideType.SERVER
                     final_path = fixed_filename.replace("server-mods/", "mods/", 1)
-                
-                # 2. Авто-определение по типу контента (НОВОЕ!)
                 elif fixed_filename.startswith("shaderpacks/"):
-                    side = SideType.CLIENT  # Шейдеры нужны только глазам игрока
+                    side = SideType.CLIENT
                 elif fixed_filename.startswith("resourcepacks/"):
-                    side = SideType.CLIENT  # Ресурспаки обычно тоже
+                    side = SideType.CLIENT
                 
-                # 3. Эвристика по имени (защита от дурака)
                 if "tlskincape" in fixed_filename.lower() or "optifine" in fixed_filename.lower():
                     side = SideType.CLIENT
 
-                # Чтение данных
                 file_data = archive_obj.read(file_info)
                 file_hash = calculate_sha256(file_data)
-                file_size = file_info.file_size
                 s3_path = f"objects/{file_hash[:2]}/{file_hash}"
                 
-                stmt = select(FileModel).where(FileModel.sha256 == file_hash)
-                existing_file = (await db.execute(stmt)).scalars().first()
-                
-                if not existing_file:
-                    new_file = FileModel(
-                        sha256=file_hash,
-                        filename=os.path.basename(fixed_filename),
-                        size=file_size,
-                        s3_path=s3_path
-                    )
-                    db.add(new_file)
+                existing = (await db.execute(select(FileModel).where(FileModel.sha256 == file_hash))).scalars().first()
+                if not existing:
+                    db.add(FileModel(sha256=file_hash, filename=os.path.basename(final_path), size=file_info.file_size, s3_path=s3_path))
                     await db.flush()
-                    
-                    try:
+                    try: 
                         if not await run_in_threadpool(minio_client.bucket_exists, BUCKET_NAME):
                             await run_in_threadpool(minio_client.make_bucket, BUCKET_NAME)
-                    except Exception:
-                        pass  # Bucket already exists
-                    
-                    await run_in_threadpool(
-                        minio_client.put_object,
-                        BUCKET_NAME, 
-                        s3_path, 
-                        io.BytesIO(file_data), 
-                        length=len(file_data)
-                    )
-                    uploaded_s3_paths.append(s3_path)
-                    processed_count += 1
+                    except: pass
+                    await run_in_threadpool(minio_client.put_object, BUCKET_NAME, s3_path, io.BytesIO(file_data), length=len(file_data))
+                    uploaded_paths.append(s3_path)
+                    processed += 1
                 else:
-                    skipped_count += 1
+                    skipped += 1
 
                 await db.execute(instance_files.insert().values(
                     instance_id=instance_id,
                     file_hash=file_hash,
-                    path=final_path
-                ))
-
-        # GC после обновления
-        orphan_stmt = select(FileModel).outerjoin(
-            instance_files, FileModel.sha256 == instance_files.c.file_hash
-        ).where(instance_files.c.instance_id == None)
-        
-        orphans = (await db.execute(orphan_stmt)).scalars().all()
-        for file_obj in orphans:
-            try:
-                await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, file_obj.s3_path)
-            except: pass
-            await db.delete(file_obj)
-
+                    path=final_path,
+                    side=side
+        ))
         await db.commit() 
-        
     except Exception as e:
-        logger.error(f"Upload failed! Rolling back {len(uploaded_s3_paths)} files...")
         await db.rollback()
-        for path in uploaded_s3_paths:
-            try: minio_client.remove_object(BUCKET_NAME, path)
-            except: pass
+        for p in uploaded_paths:
+            try:
+                minio_client.remove_object(BUCKET_NAME, p)
+            except:
+                pass
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
     
-    finally:
-        archive_buffer.close()
-    
-    return {
-        "status": "success",
-        "instance": instance_id,
-        "stats": {
-            "new_files_uploaded": processed_count,
-            "files_deduplicated": skipped_count
-        }
-    }
-
-# --- NEW: FILE MANAGER ENDPOINTS ---
+    return {"status": "success", "stats": {"new_files_uploaded": processed, "files_deduplicated": skipped}}
 
 @router.get("/instances/{instance_id}/files", response_model=List[FileNode])
 async def get_instance_files(
-    instance_id: str = Path(..., regex=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", min_length=3, max_length=50),
+    instance_id: str,
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    stmt = select(Instance).where(Instance.id == instance_id)
-    if not (await db.execute(stmt)).scalars().first():
+    if not (await db.execute(select(Instance).where(Instance.id == instance_id))).scalars().first():
         raise HTTPException(status_code=404, detail="Instance not found")
 
     stmt = (
-        select(FileModel, instance_files.c.path)
+        select(FileModel, instance_files.c.path, instance_files.c.side)
         .join(instance_files, FileModel.sha256 == instance_files.c.file_hash)
         .where(instance_files.c.instance_id == instance_id)
     )
     results = await db.execute(stmt)
     
     files = []
-    for f, path in results:
-        # Расширенный список конфигов
+    for f, path, side in results:
         is_config = path.endswith((".cfg", ".txt", ".json", ".toml", ".ini", ".properties", ".md"))
-        
         files.append(FileNode(
-            path=path,
-            filename=f.filename,
-            size=f.size,
-            hash=f.sha256,
-            is_config=is_config
+            path=path, filename=f.filename, size=f.size, hash=f.sha256, is_config=is_config, side=side
         ))
     return files
+
+@router.patch("/instances/{instance_id}/files/side")
+async def update_file_side(
+    instance_id: str,
+    body: FileUpdateSide,
+    db: AsyncSession = Depends(get_db),
+    current_admin: User = Depends(get_current_admin)
+):
+    stmt = (
+        instance_files.update()
+        .where(instance_files.c.instance_id == instance_id)
+        .where(instance_files.c.path == body.path)
+        .values(side=body.side)
+    )
+    result = await db.execute(stmt)
+    await db.commit()
+    if result.rowcount == 0:
+        raise HTTPException(status_code=404, detail="File not found")
+    return {"status": "updated"}
 
 @router.delete("/instances/{instance_id}/files")
 async def delete_file(
@@ -361,7 +279,6 @@ async def upload_single_file(
             sha256=file_hash, filename=file.filename, size=file_size, s3_path=s3_path
         )
         db.add(new_file)
-        # 🔥 ВАЖНО: Добавляем flush, чтобы файл попал в БД до создания связи
         await db.flush()
         
         try:
@@ -414,11 +331,9 @@ async def get_config_content(
         content = response.read()
         response.close()
         response.release_conn()
-        # Пробуем декодировать (если это конфиг - будет utf-8)
         try:
             return content.decode('utf-8')
         except:
-            # Если не вышло (например, CP1251 в старых модах) - пробуем latin1 или cp1251
             return content.decode('cp1251')
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Read error: {e}")
@@ -447,7 +362,6 @@ async def update_config_content(
             sha256=file_hash, filename=filename, size=file_size, s3_path=s3_path
         )
         db.add(new_file)
-        # 🔥 ВАЖНО: Добавляем flush, чтобы файл попал в БД до создания связи
         await db.flush()
         await run_in_threadpool(
             minio_client.put_object, BUCKET_NAME, s3_path, io.BytesIO(content_bytes), length=file_size
