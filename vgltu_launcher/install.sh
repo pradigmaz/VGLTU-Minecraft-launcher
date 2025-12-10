@@ -2,7 +2,7 @@
 
 # ========================================================
 # PIXEL LAUNCHER - ULTIMATE CLEAN INSTALLER
-# Гарантирует запуск на чистой системе.
+# ИСПОЛЬЗУЕТ SUDO ДЛЯ ОБХОДА ПРОБЛЕМЫ С ПРАВАМИ DOCKER
 # ========================================================
 
 set -e
@@ -45,7 +45,6 @@ ask() {
     
     if [ -z "$user_input" ]; then
         log_error "Значение не может быть пустым!"
-        # Используем рекурсию с return, чтобы не сломать основной поток
         ask "$var_name" "$default_value" "$prompt" "$env_var"
         return
     fi
@@ -88,7 +87,8 @@ fi
 
 # 0.1 Удаление Docker
 log_info "Удаление старых Docker-контейнеров и образов..."
-docker compose down -v --remove-orphans 2>/dev/null || true
+# Добавлено sudo для гарантии выполнения
+sudo docker compose down -v --remove-orphans 2>/dev/null || true
 sudo systemctl stop docker 2>/dev/null || true
 sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin 2>/dev/null || true
 sudo rm -rf /var/lib/docker /etc/docker 2>/dev/null
@@ -113,6 +113,7 @@ log_info "Очистка завершена. Система чиста."
 # --------------------------------------------
 log_step "Шаг 1/7: Установка Базовых Пакетов"
 sudo apt update && sudo apt upgrade -y
+# Устанавливаем Nginx, Certbot и UFW заново
 sudo apt install -y ufw nginx curl git apt-transport-https ca-certificates python3-certbot-nginx
 
 # UFW Setup
@@ -125,19 +126,18 @@ echo "y" | sudo ufw enable || true
 # --------------------------------------------
 # STEP 2: DOCKER INSTALL & RIGHTS FIX
 # --------------------------------------------
-log_step "Шаг 2/7: Установка Docker и Применение Прав"
+log_step "Шаг 2/7: Установка Docker"
+
 if ! command -v docker &> /dev/null; then
     log_info "Установка Docker Engine..."
+    # Установка Docker
     curl -fsSL https://get.docker.com | sudo sh
 fi
 
-# КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Добавляем пользователя в группу docker
-sudo usermod -aG docker $USER
+# Добавляем пользователя в группу docker (чтобы он мог пользоваться командой без sudo,
+# хотя в этом скрипте мы используем sudo для надежности)
+sudo usermod -aG docker $USER 
 
-# ПРИМЕНЕНИЕ ПРАВ в текущей сессии
-# Запуск нового процесса с обновленными группами.
-log_info "Применение прав доступа (newgrp docker)..."
-newgrp docker || log_warn "Не удалось применить newgrp. Может потребоваться переподключение."
 
 # --------------------------------------------
 # STEP 3: DOMAIN & SECRETS
@@ -169,13 +169,19 @@ server {
     listen 80;
     server_name $PUBLIC_HOST;
 
+    # КРИТИЧНОЕ ИСПРАВЛЕНИЕ: Используем Docker DNS Resolver
+    resolver 127.0.0.11 valid=30s; 
+    set \$backend_host pixellauncher_backend;
+    set \$minio_host pixellauncher_minio;
+    set \$admin_host pixellauncher_admin_web;
+
     access_log /var/log/nginx/launcher_access.log;
     error_log /var/log/nginx/launcher_error.log;
     client_max_body_size 500M;
 
     # Backend API
     location /api/ {
-        proxy_pass http://pixellauncher_backend:8000/; 
+        proxy_pass http://\$backend_host:8000/; 
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -188,7 +194,7 @@ server {
 
     # MinIO S3 API (Для загрузки файлов)
     location /storage/ {
-        proxy_pass http://pixellauncher_minio:9000/; 
+        proxy_pass http://\$minio_host:9000/; 
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -201,7 +207,7 @@ server {
 
     # Admin Web (React)
     location / {
-        proxy_pass http://pixellauncher_admin_web:5173/; 
+        proxy_pass http://\$admin_host:5173/; 
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
@@ -234,12 +240,11 @@ echo "VITE_API_URL=$FRONTEND_URL/api" > admin-web/.env
 
 # 4.4 УДАЛЕНИЕ ПРОБРОСА ПОРТОВ ИЗ docker-compose
 log_info "Удаление пробросов портов 8000/5173 из docker-compose.yml..."
-# Эта команда ищет блок ports: и удаляет его для backend/admin-web
 sed -i '/backend:/,/^[^ ]/ {/ports:/,/^[^ ]/ {/^.*:8000"$/d; /^.*:5173"$/d}}' docker-compose.yml 2>/dev/null || true
 
 
 # --------------------------------------------
-# STEP 5: NGINX DEPLOYMENT & RELOAD
+# STEP 5: NGINX DEPLOYMENT (ACTIVATE)
 # --------------------------------------------
 log_step "Шаг 5/7: Активация Nginx на хосте"
 
@@ -247,27 +252,25 @@ log_info "Копирование и активация конфига Nginx..."
 sudo cp nginx/launcher.conf /etc/nginx/sites-available/launcher
 sudo ln -sf /etc/nginx/sites-available/launcher /etc/nginx/sites-enabled/default
 
-# Убираем reload, так как контейнеры еще не запущены.
-log_warn "Nginx не будет перезагружен. Перезагрузка будет после запуска Docker (Шаг 7)."
-
-
 # --------------------------------------------
 # STEP 6: DOCKER DEPLOY & INIT
 # --------------------------------------------
 log_step "Шаг 6/7: Запуск и Инициализация Сервисов"
 
 log_info "Сборка и запуск контейнеров..."
-# После newgrp docker, docker compose up должен сработать.
-docker compose up -d --build
+# ИСПОЛЬЗУЕМ SUDO ДЛЯ НАДЕЖНОСТИ
+sudo docker compose up -d --build
 
 echo "⏳ Ожидание запуска Бэкенда (15 сек)..."
 sleep 15
 
 log_info "🔧 Авто-настройка MinIO (бакет + Public Policy)..."
-docker compose exec -T backend python tools/init_minio.py || log_error "MinIO Init Failed"
+# ИСПОЛЬЗУЕМ SUDO ДЛЯ НАДЕЖНОСТИ
+sudo docker compose exec -T backend python tools/init_minio.py || log_error "MinIO Init Failed"
 
 log_info "🗄️ Применение миграций БД..."
-docker compose exec -T backend alembic upgrade head || log_error "Миграции БД не применены"
+# ИСПОЛЬЗУЕМ SUDO ДЛЯ НАДЕЖНОСТИ
+sudo docker compose exec -T backend alembic upgrade head || log_error "Миграции БД не применены"
 
 
 # --------------------------------------------
@@ -277,6 +280,7 @@ log_step "Шаг 7/7: Финальная Проверка Nginx"
 
 # На этом этапе имена pixellauncher_* уже созданы в Docker DNS.
 log_info "Проверка конфигурации Nginx и финальная перезагрузка..."
+# ИСПОЛЬЗУЕМ SUDO ДЛЯ НАДЕЖНОСТИ
 sudo nginx -t
 sudo systemctl reload nginx
 
