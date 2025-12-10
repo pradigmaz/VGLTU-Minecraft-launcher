@@ -63,7 +63,7 @@ jobs:
           key: ${{ secrets.SSH_KEY }}
           script: |
             # Переходим в папку проекта
-            cd /opt/vgltu_launcher
+            cd /home/root/VGLTU-Minecraft-launcher/vgltu_launcher/
             
             # Логинимся в реестр (чтобы скачать приватные образы)
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
