@@ -1,10 +1,17 @@
 import uuid
+import enum  # <--- NEW
 from datetime import datetime
-from sqlalchemy import Column, String, BigInteger, Boolean, ForeignKey, DateTime, Table, Integer
+from sqlalchemy import Column, String, BigInteger, Boolean, ForeignKey, DateTime, Table, Integer, Enum # <--- IMPORT ENUM
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
 from .database import Base
+
+# === НОВЫЙ ENUM ===
+class SideType(str, enum.Enum):
+    CLIENT = "CLIENT"
+    SERVER = "SERVER"
+    BOTH = "BOTH"
 
 # --- Таблица связи: Сборка <-> Файл ---
 instance_files = Table(
@@ -13,6 +20,8 @@ instance_files = Table(
     Column("instance_id", String, ForeignKey("instances.id"), primary_key=True),
     Column("file_hash", String, ForeignKey("files.sha256"), primary_key=True),
     Column("path", String, nullable=False), 
+    # === НОВОЕ ПОЛЕ ===
+    Column("side", Enum(SideType), default=SideType.BOTH, nullable=False)
 )
 
 # --- Пользователи ---

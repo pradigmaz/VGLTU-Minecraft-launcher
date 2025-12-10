@@ -2,9 +2,15 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 from datetime import datetime
 import uuid
+from enum import Enum  # <--- NEW
+
+# --- Side Enum ---
+class SideType(str, Enum):  # <--- NEW
+    CLIENT = "CLIENT"
+    SERVER = "SERVER"
+    BOTH = "BOTH"
 
 # --- Yggdrasil Request/Response Models ---
-
 class Agent(BaseModel):
     name: str = "Minecraft"
     version: int = 1
@@ -37,13 +43,14 @@ class UserCreate(BaseModel):
     username: str
     telegram_id: int
     
-# --- Manifest Models ---
+# --- Manifest Models (Client) ---
 class FileManifest(BaseModel):
     filename: str
     hash: str
     size: int
     path: str       
-    url: str        
+    url: str
+    # side клиенту знать не обязательно, он получает уже отфильтрованный список
 
 class InstanceManifest(BaseModel):
     instance_id: str
@@ -51,7 +58,7 @@ class InstanceManifest(BaseModel):
     loader_type: str
     files: List[FileManifest]
 
-# --- Admin API Models (MISSING PART) ---
+# --- Admin API Models ---
 
 class AdminInstanceView(BaseModel):
     id: str
@@ -60,25 +67,30 @@ class AdminInstanceView(BaseModel):
     files_count: int 
 
 class FileNode(BaseModel):
-    path: str       # "mods/jei.jar"
-    filename: str   # "jei.jar"
+    path: str       
+    filename: str   
     size: int
     hash: str
-    is_config: bool 
+    is_config: bool
+    side: SideType  # <--- NEW: Админка должна знать сторону
 
 class ConfigUpdateRequest(BaseModel):
     content: str
+
+# --- NEW: Смена стороны файла ---
+class FileUpdateSide(BaseModel):
+    path: str
+    side: SideType
+
 # --- SFTP Schemas ---
 class SFTPConfigBase(BaseModel):
     host: str
     port: int = 22
     username: str
     
-    # Новые поля
     rcon_host: Optional[str] = None
     rcon_port: int = 25575
     
-    # Настройки синхронизации
     sync_mods: bool = True
     sync_config: bool = True
     sync_scripts: bool = False
@@ -88,10 +100,10 @@ class SFTPConfigBase(BaseModel):
     sync_interval_minutes: int = 60
 
 class SFTPConfigCreate(SFTPConfigBase):
-    password: Optional[str] = None      # SFTP пароль
-    rcon_password: Optional[str] = None # RCON пароль
+    password: Optional[str] = None      
+    rcon_password: Optional[str] = None 
+
 class SFTPConfigUpdate(BaseModel):
-    # Все поля опциональны для PATCH
     host: Optional[str] = None
     port: Optional[int] = None
     username: Optional[str] = None
@@ -111,8 +123,6 @@ class SFTPConfigResponse(SFTPConfigBase):
     id: int
     instance_id: str
     last_sync: Optional[datetime]
-    
-    # Поля-флаги: задан ли пароль? (сами пароли не отдаем!)
     has_password: bool
     has_rcon_password: bool
     
@@ -120,6 +130,6 @@ class SFTPConfigResponse(SFTPConfigBase):
         from_attributes = True
 
 class SyncLog(BaseModel):
-    status: str # 'success', 'failed'
+    status: str 
     details: str
     timestamp: datetime

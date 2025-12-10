@@ -3,7 +3,7 @@ import os
 import io
 import logging
 from sqlalchemy.future import select
-from app.models import SFTPConnection, Instance, File as FileModel, instance_files
+from app.models import SFTPConnection, Instance, File as FileModel, instance_files, SideType
 from app.database import minio_client, BUCKET_NAME
 from datetime import datetime
 
@@ -22,12 +22,19 @@ class SFTPSyncService:
             raise Exception("SFTP configuration not found")
 
         # 2. Получаем файлы инстанса
+        # === ВАЖНО: Добавляем поле side в выборку ===
         stmt_files = (
-            select(FileModel, instance_files.c.path)
+            select(FileModel, instance_files.c.path, instance_files.c.side) # <--- ADD side
             .join(instance_files, FileModel.sha256 == instance_files.c.file_hash)
             .where(instance_files.c.instance_id == instance_id)
+            # === ФИЛЬТР: Берем только то, что нужно серверу ===
+            .where(instance_files.c.side.in_([SideType.SERVER, SideType.BOTH])) 
         )
-        files = (await self.db.execute(stmt_files)).all()
+        # files теперь список кортежей (FileModel, path, side)
+        files_result = (await self.db.execute(stmt_files)).all() 
+
+        # Преобразуем в удобный список, отбрасывая side (он уже отфильтрован)
+        files = [(f, path) for f, path, side in files_result]
 
         # 3. Подключаемся по SFTP
         transport = paramiko.Transport((config.host, config.port))

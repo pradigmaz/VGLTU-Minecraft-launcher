@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, or_, func
 from starlette.concurrency import run_in_threadpool
 from app.database import async_session_factory, minio_client
-from app.models import Instance, File as FileModel, instance_files, User
+from app.models import Instance, File as FileModel, instance_files, User, SideType
 from app.utils import calculate_sha256, validate_uploaded_archive, get_current_admin, generate_instance_id, get_db, validate_instance_id, validate_file_path
 import rarfile
 from app.schemas import AdminInstanceView, FileNode, ConfigUpdateRequest
@@ -175,6 +175,27 @@ async def upload_instance_zip(
                     logger.debug(f"SKIPPED (Junk): '{fixed_filename}'")
                     continue
 
+                # === УМНАЯ ЛОГИКА СТОРОН (ДОПОЛНЕННАЯ) ===
+                side = SideType.BOTH
+                final_path = fixed_filename
+                # 1. Явные папки в архиве
+                if fixed_filename.startswith("client-mods/"):
+                    side = SideType.CLIENT
+                    final_path = fixed_filename.replace("client-mods/", "mods/", 1)
+                elif fixed_filename.startswith("server-mods/"):
+                    side = SideType.SERVER
+                    final_path = fixed_filename.replace("server-mods/", "mods/", 1)
+                
+                # 2. Авто-определение по типу контента (НОВОЕ!)
+                elif fixed_filename.startswith("shaderpacks/"):
+                    side = SideType.CLIENT  # Шейдеры нужны только глазам игрока
+                elif fixed_filename.startswith("resourcepacks/"):
+                    side = SideType.CLIENT  # Ресурспаки обычно тоже
+                
+                # 3. Эвристика по имени (защита от дурака)
+                if "tlskincape" in fixed_filename.lower() or "optifine" in fixed_filename.lower():
+                    side = SideType.CLIENT
+
                 # Чтение данных
                 file_data = archive_obj.read(file_info)
                 file_hash = calculate_sha256(file_data)
@@ -215,7 +236,7 @@ async def upload_instance_zip(
                 await db.execute(instance_files.insert().values(
                     instance_id=instance_id,
                     file_hash=file_hash,
-                    path=fixed_filename
+                    path=final_path
                 ))
 
         # GC после обновления
