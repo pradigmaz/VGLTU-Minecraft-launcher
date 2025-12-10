@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Trash2, Box, Settings, Layers, Loader2, Cpu } from 'lucide-react';
+import { Plus, Trash2, Box, Settings, Layers, Loader2, Cpu, AlertTriangle, HardDrive } from 'lucide-react';
 import { useLanguage } from '../lib/LanguageContext';
 import api from '../lib/api';
 
@@ -8,6 +8,11 @@ export default function Dashboard() {
   const [instances, setInstances] = useState([]);
   const [loading, setLoading] = useState(true);
   const { t } = useLanguage();
+
+  // Состояние модального окна удаления
+  const [deleteModal, setDeleteModal] = useState({ open: false, id: null, title: '' });
+  const [cleanupRemote, setCleanupRemote] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchInstances = () => {
     setLoading(true);
@@ -21,13 +26,27 @@ export default function Dashboard() {
     fetchInstances();
   }, []);
 
-  const handleDelete = async (id) => {
-    if (!confirm(t('deleteConfirm'))) return;
+  // Открытие модалки
+  const openDeleteModal = (inst) => {
+      setDeleteModal({ open: true, id: inst.id, title: inst.title });
+      setCleanupRemote(false); // Сброс чекбокса по умолчанию
+  };
+
+  // Выполнение удаления
+  const handleConfirmDelete = async () => {
+    if (!deleteModal.id) return;
+    
+    setIsDeleting(true);
     try {
-      await api.delete(`/admin/instances/${id}`);
+      // Отправляем параметр cleanup_remote
+      await api.delete(`/admin/instances/${deleteModal.id}?cleanup_remote=${cleanupRemote}`);
+      
+      // Закрываем всё и обновляем список
+      setDeleteModal({ open: false, id: null, title: '' });
       fetchInstances();
     } catch (e) {
-      alert(e.message);
+      alert(e.response?.data?.detail || e.message);
+      setIsDeleting(false);
     }
   };
 
@@ -65,7 +84,6 @@ export default function Dashboard() {
           {instances.map((inst) => (
             <div key={inst.id} className="group relative bg-surface border border-border rounded-2xl p-6 transition-all hover:shadow-xl hover:shadow-blue-500/5 hover:border-blue-500/30 overflow-hidden">
               
-              {/* Фоновая иконка */}
               <div className="absolute -top-6 -right-6 opacity-[0.03] group-hover:opacity-[0.08] transition-opacity rotate-12">
                 <Box size={140} className="text-text" />
               </div>
@@ -104,7 +122,7 @@ export default function Dashboard() {
                   </Link>
 
                   <button 
-                    onClick={() => handleDelete(inst.id)}
+                    onClick={() => openDeleteModal(inst)}
                     className="p-2.5 text-muted hover:text-red-600 hover:bg-red-500/10 rounded-xl transition-colors"
                     title={t('deleteInstance')}
                   >
@@ -114,6 +132,74 @@ export default function Dashboard() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* DELETE MODAL */}
+      {deleteModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-surface border border-border rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
+                <div className="flex items-center gap-4 mb-4 text-red-600 dark:text-red-500">
+                    <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
+                        <AlertTriangle size={32} />
+                    </div>
+                    <div>
+                        <h3 className="text-xl font-bold">{t('deleteModalTitle')}</h3>
+                        <p className="text-sm text-text opacity-80">{deleteModal.title}</p>
+                    </div>
+                </div>
+                
+                <p className="text-muted mb-6 leading-relaxed">
+                    {t('deleteConfirm')}
+                </p>
+
+                {/* Cleanup Checkbox */}
+                <div className="mb-6 p-4 bg-black/5 dark:bg-white/5 rounded-xl border border-border">
+                    <label className="flex items-start gap-3 cursor-pointer group">
+                        <input 
+                            type="checkbox" 
+                            checked={cleanupRemote}
+                            onChange={e => setCleanupRemote(e.target.checked)}
+                            className="mt-1 accent-red-600 w-5 h-5 rounded border-gray-300"
+                        />
+                        <div>
+                            <span className="font-bold text-text block group-hover:text-red-600 transition-colors">
+                                {t('deleteRemoteOption')}
+                            </span>
+                            <span className="text-xs text-muted block mt-1">
+                                {t('deleteRemoteWarning')}
+                            </span>
+                        </div>
+                    </label>
+                </div>
+
+                <div className="flex justify-end gap-3">
+                    <button 
+                        onClick={() => setDeleteModal({ open: false, id: null, title: '' })}
+                        disabled={isDeleting}
+                        className="px-5 py-2.5 rounded-xl hover:bg-black/5 dark:hover:bg-white/5 text-text font-medium transition-colors"
+                    >
+                        {t('cancel')}
+                    </button>
+                    <button 
+                        onClick={handleConfirmDelete}
+                        disabled={isDeleting}
+                        className="px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold transition-all shadow-lg shadow-red-500/20 flex items-center gap-2"
+                    >
+                        {isDeleting ? (
+                            <>
+                                <Loader2 size={18} className="animate-spin" />
+                                {t('deleting')}
+                            </>
+                        ) : (
+                            <>
+                                <Trash2 size={18} />
+                                {t('confirmDelete')}
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
         </div>
       )}
     </div>

@@ -70,7 +70,47 @@ const translations = {
     delete: "Delete",
     dashboardSubtitle: "Server and Build Management",
     filesCount: "Files",
-    settings: "Settings"
+    settings: "Settings",
+    sftpSection: "SFTP (File Transfer)",
+    rconSection: "RCON (Remote Console)",
+    rconDescription: "RCON is a protocol for sending commands to the Minecraft server console remotely. It allows the launcher to safely stop the server before file updates to prevent data corruption.",
+    useSftpHost: "Use SFTP Host address",
+    rconPasswordPlaceholder: "Enter RCON password",
+    rconPort: "RCON Port",
+    enableRcon: "Enable RCON Support",
+    quickActions: "Quick Actions",
+    sendStop: "Send 'stop' command",
+    sendStopConfirm: "Are you sure you want to stop the server?",
+    stoppingServer: "Stopping server...",
+    serverStopped: "Stop command sent.",
+    contentFiles: "Game Content",
+    systemFiles: "System Files",
+    saveSuccessTitle: "Saved",
+    saveSuccessMessage: "Connection settings have been updated.",
+    syncConfirmTitle: "Start Synchronization?",
+    syncConfirmMessage: "This action will overwrite files on the remote server. Ensure you have a backup if needed.",
+    confirmAction: "Confirm & Start",
+    cancelAction: "Cancel",
+    serverTypeTitle: "Select Server Type",
+    typeHosting: "Hosting",
+    typeHostingDesc: "Managed hosting with built-in RCON support",
+    typeVps: "VPS / Dedicated",
+    typeVpsDesc: "Self-hosted server, manual RCON configuration",
+    hostingGuideTitle: "Hosting Setup Guide",
+    vpsGuideTitle: "VPS Setup Guide",
+    hostingGuideStep1: "Log in to your hosting control panel",
+    hostingGuideStep2: "Find the server.properties file in your file manager",
+    hostingGuideStep3: "RCON is usually pre-configured. If not, enable it and set a password",
+    hostingGuideStep4: "Enter the RCON password in the settings above",
+    vpsGuideStep1: "Edit your server.properties file and add/enable these lines:",
+    vpsGuideStep2: "Restart your Minecraft server",
+    vpsGuideStep4: "Enter the RCON password in the settings above",
+    whereToFind: "Where to find?",
+    deleteModalTitle: "Delete Instance",
+    deleteRemoteOption: "Also delete files from game server (SFTP)",
+    deleteRemoteWarning: "Warning: This will permanently remove mods, configs, and scripts from the remote host.",
+    confirmDelete: "Delete Forever",
+    deleting: "Deleting..."
   },
   ru: {
     dashboard: "Сборки",
@@ -141,14 +181,53 @@ const translations = {
     delete: "Удалить",
     dashboardSubtitle: "Управление серверами и сборками",
     filesCount: "Файлов",
-    settings: "Настройки"
+    settings: "Настройки",
+    sftpSection: "SFTP (Передача файлов)",
+    rconSection: "RCON (Удаленная консоль)",
+    rconDescription: "RCON — это протокол для отправки команд в консоль Minecraft сервера. Это позволяет лаунчеру безопасно остановить сервер перед обновлением файлов, чтобы избежать повреждения данных.",
+    useSftpHost: "Использовать адрес SFTP",
+    rconPasswordPlaceholder: "Введите RCON пароль",
+    rconPort: "RCON Порт",
+    enableRcon: "Включить поддержку RCON",
+    quickActions: "Быстрые действия",
+    sendStop: "Отправить команду 'stop'",
+    sendStopConfirm: "Вы уверены, что хотите остановить сервер?",
+    stoppingServer: "Останавливаю сервер...",
+    serverStopped: "Команда остановки отправлена.",
+    contentFiles: "Игровой контент",
+    systemFiles: "Системные файлы",
+    saveSuccessTitle: "Сохранено",
+    saveSuccessMessage: "Настройки подключения обновлены.",
+    syncConfirmTitle: "Запустить синхронизацию?",
+    syncConfirmMessage: "Это действие перезапишет файлы на удаленном сервере. Убедитесь, что у вас есть бэкап, если это необходимо.",
+    confirmAction: "Подтвердить и начать",
+    cancelAction: "Отмена",
+    serverTypeTitle: "Выберите тип сервера",
+    typeHosting: "Хостинг",
+    typeHostingDesc: "Управляемый хостинг со встроенной поддержкой RCON",
+    typeVps: "VPS / Dedicated",
+    typeVpsDesc: "Самостоятельно размещённый сервер, ручная настройка RCON",
+    hostingGuideTitle: "Руководство по настройке хостинга",
+    vpsGuideTitle: "Руководство по настройке VPS",
+    hostingGuideStep1: "Войдите в панель управления вашего хостинга",
+    hostingGuideStep2: "Найдите файл server.properties в файловом менеджере",
+    hostingGuideStep3: "RCON обычно уже настроен. Если нет, включите его и установите пароль",
+    hostingGuideStep4: "Введите пароль RCON в настройках выше",
+    vpsGuideStep1: "Отредактируйте файл server.properties и добавьте/включите эти строки:",
+    vpsGuideStep2: "Перезагрузите ваш Minecraft сервер",
+    vpsGuideStep4: "Введите пароль RCON в настройках выше",
+    whereToFind: "Где найти?",
+    deleteModalTitle: "Удаление Сборки",
+    deleteRemoteOption: "Также удалить файлы с игрового сервера (SFTP)",
+    deleteRemoteWarning: "Внимание: Это навсегда удалит моды, конфиги и скрипты с удаленного сервера.",
+    confirmDelete: "Удалить навсегда",
+    deleting: "Удаление..."
   }
 };
 
 const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
-  // По умолчанию русский
   const [lang, setLang] = useState(() => localStorage.getItem("lang") || "ru");
 
   const toggleLang = () => {
@@ -157,7 +236,6 @@ export function LanguageProvider({ children }) {
     localStorage.setItem("lang", newLang);
   };
 
-  // Функция перевода: t('dashboard') -> 'Сборки'
   const t = (key) => translations[lang][key] || key;
 
   return (

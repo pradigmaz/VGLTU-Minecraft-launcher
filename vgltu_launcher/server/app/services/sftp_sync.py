@@ -1,10 +1,13 @@
 import paramiko
 import os
 import io
+import logging
 from sqlalchemy.future import select
 from app.models import SFTPConnection, Instance, File as FileModel, instance_files
 from app.database import minio_client, BUCKET_NAME
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 class SFTPSyncService:
     def __init__(self, db_session):
@@ -100,3 +103,62 @@ class SFTPSyncService:
             raise Exception(f"SFTP Error: {str(e)}")
         finally:
             transport.close()
+
+    async def cleanup_instance(self, instance_id: str, target_folders: list = None):
+        """
+        Удаляет указанные папки с удаленного сервера через SFTP.
+        Используется при удалении сборки.
+        """
+        if target_folders is None:
+            # Дефолтный набор для зачистки
+            target_folders = ["mods", "config", "scripts", "shaderpacks", "resourcepacks"]
+
+        # 1. Получаем конфиг (пока он еще есть в БД)
+        stmt = select(SFTPConnection).where(SFTPConnection.instance_id == instance_id)
+        config = (await self.db.execute(stmt)).scalars().first()
+        
+        if not config:
+            logger.warning(f"Skipping remote cleanup for {instance_id}: No SFTP config found.")
+            return
+
+        logger.info(f"Starting remote cleanup for {instance_id} on {config.host}...")
+        
+        transport = paramiko.Transport((config.host, config.port))
+        try:
+            transport.connect(username=config.username, password=config.password)
+            sftp = paramiko.SFTPClient.from_transport(transport)
+
+            for folder in target_folders:
+                logger.info(f"Removing remote folder: {folder}")
+                self._rmtree(sftp, folder)
+                
+            logger.info("Remote cleanup completed.")
+        except Exception as e:
+            logger.error(f"Remote cleanup failed: {e}")
+            # Не рейзим ошибку, чтобы не блокировать удаление сборки из БД
+        finally:
+            transport.close()
+
+    def _rmtree(self, sftp, remote_path):
+        """
+        Рекурсивное удаление папки через SFTP (аналог rm -rf)
+        """
+        try:
+            files = sftp.listdir(remote_path)
+        except IOError:
+            # Папки нет или нет доступа
+            return
+
+        for f in files:
+            filepath = os.path.join(remote_path, f).replace("\\", "/")
+            try:
+                # Пробуем удалить как файл
+                sftp.remove(filepath)
+            except IOError:
+                # Если ошибка, скорее всего это папка -> рекурсия
+                self._rmtree(sftp, filepath)
+        
+        try:
+            sftp.rmdir(remote_path)
+        except IOError:
+            pass

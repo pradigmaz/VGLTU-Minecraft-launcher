@@ -8,6 +8,7 @@ from app.models import Instance, File as FileModel, instance_files, User
 from app.utils import calculate_sha256, validate_uploaded_archive, get_current_admin, generate_instance_id, get_db, validate_instance_id, validate_file_path
 import rarfile
 from app.schemas import AdminInstanceView, FileNode, ConfigUpdateRequest
+from app.services.sftp_sync import SFTPSyncService  # <--- IMPORTED
 from typing import List
 from pydantic import BaseModel
 import zipfile
@@ -57,16 +58,29 @@ async def get_admin_instances(
 @router.delete("/instances/{instance_id}")
 async def delete_instance(
     instance_id: str = Path(..., regex=r"^[a-z0-9][a-z0-9-]*[a-z0-9]$", min_length=3, max_length=50),
+    cleanup_remote: bool = Query(False, description="Удалить файлы с игрового сервера (SFTP)"), # <--- NEW PARAM
     db: AsyncSession = Depends(get_db),
     current_admin: User = Depends(get_current_admin)
 ):
-    logger.info(f"Deleting instance: {instance_id}")
+    logger.info(f"Deleting instance: {instance_id}, cleanup_remote={cleanup_remote}")
     stmt = select(Instance).where(Instance.id == instance_id)
     instance = (await db.execute(stmt)).scalars().first()
     
     if not instance:
         raise HTTPException(status_code=404, detail="Instance not found")
 
+    # --- REMOTE CLEANUP ---
+    if cleanup_remote:
+        # Пытаемся почистить удаленный сервер, пока настройки SFTP еще живы
+        try:
+            logger.info("Initiating remote cleanup...")
+            sync_service = SFTPSyncService(db)
+            await sync_service.cleanup_instance(instance_id)
+        except Exception as e:
+            # Логируем, но не прерываем удаление инстанса (fail-safe)
+            logger.error(f"Remote cleanup failed, but proceeding with local deletion: {e}")
+
+    # --- LOCAL DELETION ---
     await db.execute(
         instance_files.delete().where(instance_files.c.instance_id == instance_id)
     )
@@ -94,6 +108,7 @@ async def delete_instance(
     return {
         "status": "deleted",
         "instance_id": instance_id,
+        "remote_cleanup": cleanup_remote,
         "gc_stats": {
             "orphaned_files_removed": deleted_files_count,
             "space_freed_mb": round(deleted_size_bytes / 1024 / 1024, 2)

@@ -73,24 +73,32 @@ class SFTPConfigBase(BaseModel):
     host: str
     port: int = 22
     username: str
-    password: str
+    
+    # Новые поля
+    rcon_host: Optional[str] = None
+    rcon_port: int = 25575
+    
+    # Настройки синхронизации
     sync_mods: bool = True
     sync_config: bool = True
+    sync_scripts: bool = False
     sync_shaderpacks: bool = False
     sync_resourcepacks: bool = False
-    sync_scripts: bool = False
     auto_sync: bool = False
-    sync_interval_minutes: int = 30
+    sync_interval_minutes: int = 60
 
 class SFTPConfigCreate(SFTPConfigBase):
-    pass
-
+    password: Optional[str] = None      # SFTP пароль
+    rcon_password: Optional[str] = None # RCON пароль
 class SFTPConfigUpdate(BaseModel):
     # Все поля опциональны для PATCH
     host: Optional[str] = None
     port: Optional[int] = None
     username: Optional[str] = None
     password: Optional[str] = None
+    rcon_host: Optional[str] = None
+    rcon_port: Optional[int] = None
+    rcon_password: Optional[str] = None
     sync_mods: Optional[bool] = None
     sync_config: Optional[bool] = None
     sync_shaderpacks: Optional[bool] = None
@@ -103,6 +111,10 @@ class SFTPConfigResponse(SFTPConfigBase):
     id: int
     instance_id: str
     last_sync: Optional[datetime]
+    
+    # Поля-флаги: задан ли пароль? (сами пароли не отдаем!)
+    has_password: bool
+    has_rcon_password: bool
     
     class Config:
         from_attributes = True

@@ -10,4 +10,4 @@ slowapi==0.1.9
 pyjwt==2.8.0
 alembic==1.13.1
 rarfile==4.1
-paramiko
+paramiko==3.5.1
