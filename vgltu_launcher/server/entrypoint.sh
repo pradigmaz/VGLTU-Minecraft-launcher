@@ -14,28 +14,27 @@ for i in {1..30}; do
   sleep 2
 done
 
-# 2. ОЖИДАНИЕ REDIS (Увеличиваем время ожидания)
+# 2. ОЖИДАНИЕ REDIS (Устранение проблемы с аутентификацией)
 echo "⏳ Waiting for Redis..."
-# Пароль REDIS_PASSWORD доступен из Docker Compose
-REDIS_HOST="redis"
+REDIS_HOST="redis" # Имя сервиса
+# Используем команду printf для передачи аутентификации и PING
+REDIS_CONNECT_CMD='printf "AUTH $REDIS_PASSWORD\r\nPING\r\n" | redis-cli -h $REDIS_HOST'
 
-for i in {1..15}; do # Увеличиваем попытки до 15 (30 секунд)
-  # Проверяем готовность Redis, используя его DNS-имя и пароль
-  # Этот шаг требует установленного в Dockerfile пакета redis-tools!
-  if redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
-    echo "✅ Redis is ready!"
+for i in {1..15}; do # 15 попыток по 2 секунды
+  # Выполняем команду аутентификации и ping. Ищем "PONG" в ответе.
+  # Мы используем bash-скрипт для исполнения, чтобы правильно обработать REDIS_PASSWORD
+  if bash -c "$REDIS_CONNECT_CMD" | grep PONG > /dev/null 2>&1; then 
+    echo "✅ Redis is ready and authenticated!"
     break
   fi
+
   echo "Attempt $i/15: Redis not ready yet, waiting..."
+  if [ $i -eq 15 ]; then
+  echo "❌ CRITICAL FAILURE: Redis not available after all attempts. Exiting Docker entrypoint."
+    exit 1 # Выход с ошибкой.
+fi
   sleep 2
 done
-
-# КРИТИЧЕСКАЯ ПРОВЕРКА: Если Redis не готов, не запускаем приложение
-if ! redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
-  echo "❌ CRITICAL FAILURE: Redis not available after all attempts. Exiting Docker entrypoint."
-  exit 1 # Выход с ошибкой. Docker не будет запускать Uvicorn.
-fi
-
 
 # 3. Миграции БД
 echo "🔄 Running database migrations..."
