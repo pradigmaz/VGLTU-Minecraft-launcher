@@ -17,19 +17,85 @@ NC='\033[0m'
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
+# --------------------------------------------
+# START FUNCTION DEFINITIONS (MUST BE FIRST)
+# --------------------------------------------
 log_info() { echo -e "${GREEN}[✓]${NC} $1"; }
 log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
 log_error() { echo -e "${RED}[✗]${NC} $1"; }
 log_step() { echo -e "\n${BLUE}▶ $1${NC}"; }
 
-# --- Utility Functions (ask, ask_generate remain the same) ---
+ask() {
+    local var_name="$1"
+    local default_value="$2"
+    local prompt="$3"
+    local env_var="$4"
+    
+    echo -e "${CYAN}$prompt${NC}"
+    if [ -n "$default_value" ]; then
+        echo -n "[$default_value]: "
+    else
+        echo -n ": "
+    fi
 
-# ... (Utility functions ask and ask_generate go here) ...
+    read user_input
+    
+    if [ -z "$user_input" ]; then
+        user_input="$default_value"
+fi
+
+    if [ -z "$user_input" ]; then
+        log_error "Значение не может быть пустым!"
+        ask "$var_name" "$default_value" "$prompt" "$env_var"
+        return
+    fi
+    
+    eval "$env_var=\"$user_input\""
+}
+
+ask_generate() {
+    local var_name="$1"
+    local prompt="$2"
+    local env_var="$3"
+    local length="$4"
+    
+    local generated_value=$(openssl rand -base64 $length | tr -d "=+/" | cut -c1-$length)
+    
+    echo -e "${CYAN}$prompt${NC}"
+    echo -n "Сгенерировано: $generated_value. Использовать? [Y/n]: "
+    read use_generated
+    
+    if [ "$use_generated" = "n" ] || [ "$use_generated" = "N" ]; then
+        ask "$var_name" "" "$prompt (введите вручную)" "$env_var"
+    else
+        eval "$env_var=\"$generated_value\""
+fi}
+# --------------------------------------------
+# END FUNCTION DEFINITIONS
+# --------------------------------------------
+
+# ============================================
+# STEP 0: SYSTEM PREP (Теперь это первый вызов)
+# ============================================
+log_step "Шаг 0/6: Подготовка Системы (UFW, APT)"
+
+# System Update
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y ufw nginx curl git apt-transport-https ca-certificates python3-certbot-nginx
+
+# UFW Setup
+log_info "Настройка UFW (Firewall)..."
+sudo ufw allow 22/tcp || true
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+echo "y" | sudo ufw enable || true
+
+log_info "Система подготовлена."
 
 # --------------------------------------------
-# CRITICAL STEP 0: FULL CLEANUP
+# CRITICAL STEP 1: FULL CLEANUP
 # --------------------------------------------
-log_step "Шаг 0/6: ПОЛНАЯ ОЧИСТКА ХОСТА (Docker, Nginx, UFW)"
+log_step "Шаг 1/6: ПОЛНАЯ ОЧИСТКА ХОСТА (Docker, Nginx, UFW)"
 echo -e "${RED}⚠️  Это действие удалит ВСЕ Docker-контейнеры, volumes и сервисы Nginx с хоста.${NC}"
 echo -n "Продолжить очистку? [Y/n]: "; read CLEANUP_CONFIRM
 if [ "$CLEANUP_CONFIRM" = "n" ] || [ "$CLEANUP_CONFIRM" = "N" ]; then
@@ -53,21 +119,6 @@ sudo apt purge -y nginx 2>/dev/null || true
 rm -f .env admin-web/.env nginx.conf 2>/dev/null
 
 log_info "Очистка завершена. Система чиста."
-
-# --------------------------------------------
-# STEP 1: SYSTEM PREP & PACKAGE INSTALL
-# --------------------------------------------
-log_step "Шаг 1/6: Установка Базовых Пакетов"
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y ufw nginx curl git apt-transport-https ca-certificates python3-certbot-nginx
-
-# UFW Setup
-log_info "Настройка UFW (Firewall)..."
-sudo ufw allow 22/tcp || true
-sudo ufw allow 80/tcp
-sudo ufw allow 443/tcp
-echo "y" | sudo ufw enable || true
-log_info "Базовые пакеты установлены."
 
 # --------------------------------------------
 # STEP 2: DOMAIN & DOCKER CHECK
