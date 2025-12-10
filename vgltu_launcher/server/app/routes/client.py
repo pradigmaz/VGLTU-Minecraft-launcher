@@ -10,7 +10,7 @@ import os
 
 router = APIRouter(prefix="/api/client", tags=["Client"])
 
-STORAGE_URL = os.getenv("STORAGE_BASE_URL", "http://localhost:9000/pixellauncher-storage")
+STORAGE_URL = os.getenv("STORAGE_BASE_URL", "http://localhost:9000/launcher-files")
 
 class InstanceSummary(BaseModel):
     id: str
