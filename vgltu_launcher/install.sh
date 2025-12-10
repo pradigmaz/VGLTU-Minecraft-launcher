@@ -188,17 +188,17 @@ server {
         send_timeout 600;
     }
 
-    # Authlib-injector auth server
-    location /authserver/ {
-        proxy_pass http://localhost:8000/authserver/;
+    # Authlib-injector auth server (без trailing slash для избежания редиректов)
+    location /authserver {
+        proxy_pass http://localhost:8000/authserver;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
     }
 
     # Authlib-injector session server
-    location /sessionserver/ {
-        proxy_pass http://localhost:8000/sessionserver/;
+    location /sessionserver {
+        proxy_pass http://localhost:8000/sessionserver;
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
