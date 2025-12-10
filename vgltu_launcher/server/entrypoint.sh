@@ -3,9 +3,6 @@
 # Останавливаем скрипт при любой критической ошибке
 set -e
 
-# Читаем пароль Redis из переменных окружения для CLI
-REDIS_PASSWORD=${REDIS_PASSWORD}
-
 # 1. Ожидание базы данных
 echo "⏳ Waiting for PostgreSQL..."
 for i in {1..30}; do
@@ -17,28 +14,28 @@ for i in {1..30}; do
   sleep 2
 done
 
-# 2. ОЖИДАНИЕ REDIS (КРИТИЧНОЕ ДОБАВЛЕНИЕ)
+# 2. ОЖИДАНИЕ REDIS (Увеличиваем время ожидания)
 echo "⏳ Waiting for Redis..."
-for i in {1..10}; do
-  # Проверяем готовность Redis, используя его DNS-имя (redis) и пароль
-  # redis-cli -h redis -a "$REDIS_PASSWORD" ping
-  if command -v redis-cli &> /dev/null; then
-    # Если redis-cli доступен, используем его
-    if redis-cli -h redis -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
-      echo "✅ Redis is ready!"
-      break
-    fi
-  else
-    # Если redis-cli нет, ждем еще 2 секунды (менее надежный путь)
-    echo "Warning: redis-cli not found, waiting passively..."
-  fi
-  
-  if [ $i -eq 10 ]; then
-    echo "❌ Error: Redis not available after 10 attempts. Continuing may cause errors."
+# Пароль REDIS_PASSWORD доступен из Docker Compose
+REDIS_HOST="redis"
+
+for i in {1..15}; do # Увеличиваем попытки до 15 (30 секунд)
+  # Проверяем готовность Redis, используя его DNS-имя и пароль
+  # Этот шаг требует установленного в Dockerfile пакета redis-tools!
+  if redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
+    echo "✅ Redis is ready!"
     break
   fi
+  echo "Attempt $i/15: Redis not ready yet, waiting..."
   sleep 2
 done
+
+# КРИТИЧЕСКАЯ ПРОВЕРКА: Если Redis не готов, не запускаем приложение
+if ! redis-cli -h "$REDIS_HOST" -a "$REDIS_PASSWORD" ping > /dev/null 2>&1; then
+  echo "❌ CRITICAL FAILURE: Redis not available after all attempts. Exiting Docker entrypoint."
+  exit 1 # Выход с ошибкой. Docker не будет запускать Uvicorn.
+fi
+
 
 # 3. Миграции БД
 echo "🔄 Running database migrations..."
