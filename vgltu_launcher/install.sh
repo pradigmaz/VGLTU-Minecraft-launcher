@@ -2,8 +2,7 @@
 
 # ========================================================
 # PIXEL LAUNCHER - ULTIMATE CLEAN INSTALLER
-# 1. Удаляет старые Nginx/Docker/UFW конфиги
-# 2. Устанавливает всё с нуля и разворачивает проект
+# Гарантирует запуск на чистой системе.
 # ========================================================
 
 set -e
@@ -42,8 +41,8 @@ ask() {
     
     if [ -z "$user_input" ]; then
         user_input="$default_value"
-fi
-
+    fi
+    
     if [ -z "$user_input" ]; then
         log_error "Значение не может быть пустым!"
         ask "$var_name" "$default_value" "$prompt" "$env_var"
@@ -76,11 +75,42 @@ ask_generate() {
 # --------------------------------------------
 
 # ============================================
-# STEP 0: SYSTEM PREP (Теперь это первый вызов)
+# STEP 0: CRITICAL CLEANUP (START)
 # ============================================
-log_step "Шаг 0/6: Подготовка Системы (UFW, APT)"
+log_step "Шаг 0/7: КРИТИЧЕСКАЯ ОЧИСТКА ХОСТА"
+echo -e "${RED}⚠️  Это действие удалит ВСЕ Docker-контейнеры, volumes, Nginx и Docker Engine с хоста.${NC}"
+echo -n "Введите 'CLEANUP' для подтверждения полного сброса: "; read CLEANUP_CONFIRM
+if [ "$CLEANUP_CONFIRM" != "CLEANUP" ]; then
+    log_error "Установка отменена."
+    exit 1
+fi
 
-# System Update
+# 0.1 Удаление Docker
+log_info "Удаление старых Docker-контейнеров и образов..."
+docker compose down -v --remove-orphans 2>/dev/null || true
+sudo systemctl stop docker 2>/dev/null || true
+sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin 2>/dev/null || true
+sudo rm -rf /var/lib/docker /etc/docker 2>/dev/null
+
+# 0.2 Удаление Nginx
+log_info "Удаление Nginx и его конфигов..."
+sudo systemctl stop nginx 2>/dev/null || true
+sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+sudo rm -f /etc/nginx/sites-available/launcher 2>/dev/null || true
+sudo apt purge -y nginx 2>/dev/null || true
+
+# 0.3 Локальная очистка
+log_info "Удаление локальных конфигов..."
+rm -f .env admin-web/.env nginx.conf 2>/dev/null
+rm -rf docker-data 2>/dev/null
+
+log_info "Очистка завершена. Система чиста."
+
+
+# ============================================
+# STEP 1: SYSTEM PREP & PACKAGE INSTALL
+# ============================================
+log_step "Шаг 1/7: Установка Базовых Пакетов"
 sudo apt update && sudo apt upgrade -y
 sudo apt install -y ufw nginx curl git apt-transport-https ca-certificates python3-certbot-nginx
 
@@ -91,69 +121,41 @@ sudo ufw allow 80/tcp
 sudo ufw allow 443/tcp
 echo "y" | sudo ufw enable || true
 
-log_info "Система подготовлена."
-
 # --------------------------------------------
-# CRITICAL STEP 1: FULL CLEANUP
+# STEP 2: DOCKER INSTALL
 # --------------------------------------------
-log_step "Шаг 1/6: ПОЛНАЯ ОЧИСТКА ХОСТА (Docker, Nginx, UFW)"
-echo -e "${RED}⚠️  Это действие удалит ВСЕ Docker-контейнеры, volumes и сервисы Nginx с хоста.${NC}"
-echo -n "Продолжить очистку? [Y/n]: "; read CLEANUP_CONFIRM
-if [ "$CLEANUP_CONFIRM" = "n" ] || [ "$CLEANUP_CONFIRM" = "N" ]; then
-    log_error "Установка отменена."
-    exit 1
-fi
-
-# Docker Cleanup
-docker compose down -v --remove-orphans 2>/dev/null || true
-sudo systemctl stop nginx docker || true
-sudo apt purge -y docker-ce docker-ce-cli containerd.io docker-compose-plugin 2>/dev/null || true
-sudo rm -rf /var/lib/docker /etc/docker 2>/dev/null
-
-# Nginx Cleanup
-sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-sudo rm -f /etc/nginx/sites-available/launcher 2>/dev/null || true
-sudo systemctl reload nginx 2>/dev/null || true
-sudo apt purge -y nginx 2>/dev/null || true
-
-# Local Config Cleanup
-rm -f .env admin-web/.env nginx.conf 2>/dev/null
-
-log_info "Очистка завершена. Система чиста."
-
-# --------------------------------------------
-# STEP 2: DOMAIN & DOCKER CHECK
-# --------------------------------------------
-DETECTED_IP=$(curl -s ifconfig.me || echo "31.129.97.134")
-log_step "Шаг 2/6: Домен и Docker"
-
-ask "Введите публичный домен/IP" "$DETECTED_IP" \
-    "Для продакшена укажите домен, для теста — IP" \
-    "PUBLIC_HOST"
-
+log_step "Шаг 2/7: Установка Docker"
 if ! command -v docker &> /dev/null; then
-    log_info "Установка Docker..."
+    log_info "Установка Docker Engine..."
     curl -fsSL https://get.docker.com | sudo sh
     sudo usermod -aG docker $USER
     log_warn "Docker установлен. Рекомендуется переподключиться для применения прав."
 fi
 
+
 # --------------------------------------------
-# STEP 3: SECRETS
+# STEP 3: DOMAIN & SECRETS
 # --------------------------------------------
-log_step "Шаг 3/6: Пароли и Ключи"
+DETECTED_IP=$(curl -s ifconfig.me || echo "31.129.97.134")
+log_step "Шаг 3/7: Домен и Пароли"
+
+ask "PUBLIC_HOST" "$DETECTED_IP" \
+    "Введите публичный домен или IP адрес" \
+    "PUBLIC_HOST"
+
 ask_generate "POSTGRES_PASSWORD" "Пароль БД" "POSTGRES_PASSWORD" 16
 ask_generate "MINIO_ROOT_PASSWORD" "Пароль MinIO (S3)" "MINIO_ROOT_PASSWORD" 16
 ask_generate "SECRET_KEY" "JWT Secret Key" "SECRET_KEY" 32
 ask "BOT_TOKEN" "" "Токен бота от @BotFather" "BOT_TOKEN"
 ask "ADMIN_IDS" "" "Telegram ID админов" "ADMIN_IDS"
 
+
 # --------------------------------------------
 # STEP 4: CONFIGURATION GENERATION
 # --------------------------------------------
-log_step "Шаг 4/6: Генерация Конфигурации"
+log_step "Шаг 4/7: Генерация Конфигурации"
 
-# 4.1 Nginx Config Generation (ИСПРАВЛЕНО: используем имена контейнеров)
+# 4.1 Nginx Config Generation
 log_info "Генерация Nginx-конфига для $PUBLIC_HOST..."
 cat > nginx/launcher.conf << EOF
 # Базовая конфигурация Nginx для $PUBLIC_HOST
@@ -224,29 +226,29 @@ EOF
 # 4.3 Admin-Web .env
 echo "VITE_API_URL=$FRONTEND_URL/api" > admin-web/.env
 
-# 4.4 УДАЛЕНИЕ ПРОБРОСА ПОРТОВ ИЗ docker-compose (Если они есть)
+# 4.4 УДАЛЕНИЕ ПРОБРОСА ПОРТОВ ИЗ docker-compose (Для чистоты)
 log_info "Удаление пробросов портов 8000/5173 из docker-compose.yml..."
 sed -i '/backend:/,/^[^ ]/ {/ports:/,/^[^ ]/ {/^.*:8000"$/d; /^.*:5173"$/d}}' docker-compose.yml 2>/dev/null || true
 
 
 # --------------------------------------------
-# STEP 5: NGINX DEPLOYMENT & SSL
+# STEP 5: NGINX DEPLOYMENT & RELOAD
 # --------------------------------------------
-log_step "Шаг 5/6: Активация Nginx на хосте"
+log_step "Шаг 5/7: Активация Nginx на хосте"
 
 log_info "Копирование и активация конфига Nginx..."
 # Копируем конфиг, который мы только что сгенерировали
 sudo cp nginx/launcher.conf /etc/nginx/sites-available/launcher
 sudo ln -sf /etc/nginx/sites-available/launcher /etc/nginx/sites-enabled/default
 
-# Проверка и перезагрузка (это должно работать, так как контейнеры еще не запущены)
-sudo nginx -t
-sudo systemctl reload nginx
+# ВАЖНО: Nginx -t сработает, потому что мы не используем DNS.
+# Но reload сработает, когда Docker создаст имена сервисов.
+sudo systemctl reload nginx 2>/dev/null || log_warn "Nginx не смог перезагрузиться (контейнеры еще не запущены). Это нормально."
 
 # --------------------------------------------
 # STEP 6: DOCKER DEPLOY & INIT
 # --------------------------------------------
-log_step "Шаг 6/6: Запуск и Инициализация Сервисов"
+log_step "Шаг 6/7: Запуск и Инициализация Сервисов"
 
 log_info "Сборка и запуск контейнеров..."
 # Используем --build, чтобы admin-web подхватил VITE_API_URL
@@ -261,6 +263,16 @@ docker compose exec -T backend python tools/init_minio.py || log_error "MinIO In
 
 log_info "🗄️ Применение миграций БД..."
 docker compose exec -T backend alembic upgrade head || log_error "Миграции БД не применены"
+
+# --------------------------------------------
+# STEP 7: FINAL NGINX RELOAD (СУПЕР КРИТИЧНО!)
+# --------------------------------------------
+log_step "Шаг 7/7: Финальная Проверка Nginx"
+
+# На этом этапе имена pixellauncher_* уже созданы в Docker DNS.
+log_info "Проверка конфигурации Nginx и финальная перезагрузка..."
+sudo nginx -t
+sudo systemctl reload nginx
 
 # --------------------------------------------
 # FINAL REPORT
