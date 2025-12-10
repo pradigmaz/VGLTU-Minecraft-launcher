@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# PIXEL LAUNCHER - AUTO INSTALLER (v2)
+# PIXEL LAUNCHER - FINAL ONE-STEP INSTALLER
 # ==========================================
 
 set -e
@@ -9,129 +9,202 @@ set -e
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 RED='\033[0;31m'
+CYAN='\033[0;36m'
+BLUE='\033[0;34m'
 NC='\033[0m'
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
 
-echo -e "${GREEN}"
-echo "╔════════════════════════════════════════════════════════════╗"
-echo "║           Pixel Launcher — Автоматическая установка        ║"
-echo "╚════════════════════════════════════════════════════════════╝"
-echo -e "${NC}"
+log_info() { echo -e "${GREEN}[✓]${NC} $1"; }
+log_warn() { echo -e "${YELLOW}[!]${NC} $1"; }
+log_error() { echo -e "${RED}[✗]${NC} $1"; }
+log_step() { echo -e "\n${BLUE}▶ $1${NC}"; }
 
-# 1. ОПРЕДЕЛЕНИЕ IP
-DETECTED_IP=$(curl -s ifconfig.me || echo "127.0.0.1")
-echo -e "\n${YELLOW}▶ Шаг 1: Сетевые настройки${NC}"
-echo -n "Введите IP сервера или домен [$DETECTED_IP]: "
-read USER_IP
-if [ -z "$USER_IP" ]; then USER_IP="$DETECTED_IP"; fi
-echo -e "${GREEN}✓ Используем адрес: $USER_IP${NC}"
+ask() {
+    local prompt="$1"; local default="$2"; local hint="$3"; local var_name="$4"; local is_secret="${5:-false}"
+    echo ""; echo -e "${YELLOW}$prompt${NC}"
+    [ -n "$hint" ] && echo -e "  ${CYAN}↳ $hint${NC}"
+    if [ -n "$default" ]; then echo -n "[$default]: "; else echo -n ": "; fi
+    if [ "$is_secret" = "true" ]; then read -s value; echo ""; else read value; fi
+    if [ -z "$value" ] && [ -n "$default" ]; then value="$default"; fi
+    eval "$var_name=\"$value\""
+}
 
-# 2. DOCKER
-echo -e "\n${YELLOW}▶ Шаг 2: Проверка Docker${NC}"
+ask_generate() {
+    local prompt="$1"; local hint="$2"; local var_name="$3"; local length="${4:-32}"
+    echo ""; echo -e "${YELLOW}$prompt${NC}"; echo -e "  ${CYAN}↳ $hint${NC}"
+    local generated=$(openssl rand -hex "$length" 2>/dev/null || head -c "$((length*2))" /dev/urandom | xxd -p | tr -d '\n' | head -c "$((length*2))")
+    echo -n "Сгенерировать автоматически? [Y/n]: "; read choice
+    if [ "$choice" = "n" ] || [ "$choice" = "N" ]; then echo -n "Введите значение: "; read -s value; echo ""; else value="$generated"; log_info "Сгенерировано"; fi
+    eval "$var_name=\"$value\""
+}
+
+# ============================================
+# STEP 0: SYSTEM PREP (UFW, APT)
+# ============================================
+log_step "Шаг 0/5: Подготовка Системы (UFW, APT)"
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y ufw nginx curl git apt-transport-https ca-certificates python3-certbot-nginx
+
+# Настройка UFW
+log_info "Настройка UFW (Firewall)..."
+sudo ufw allow 22/tcp || log_warn "Порт 22 уже открыт или UFW неактивен."
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+echo "y" | sudo ufw enable || true # Включаем, если выключен
+# ============================================
+# STEP 1: DOMAIN & DOCKER CHECK
+# ============================================
+DETECTED_IP=$(curl -s ifconfig.me || echo "31.129.97.134") # Ваш IP
+log_step "Шаг 1/5: Домен и Docker"
+
+ask "Введите публичный домен/IP" "$DETECTED_IP" \
+    "Для продакшена укажите домен, для теста — IP" \
+    "PUBLIC_HOST"
+
+# Проверка и установка Docker
 if ! command -v docker &> /dev/null; then
-    echo "Установка Docker..."
+    log_info "Установка Docker..."
     curl -fsSL https://get.docker.com | sudo sh
     sudo usermod -aG docker $USER
-    echo -e "${GREEN}✓ Docker установлен${NC}"
-else
-    echo -e "${GREEN}✓ Docker найден${NC}"
+    log_info "Docker установлен. Перезайдите в SSH, чтобы применить права."
 fi
 
-# 3. КЛЮЧИ
-echo -e "\n${YELLOW}▶ Шаг 3: Генерация ключей${NC}"
-SECRET_KEY=$(openssl rand -hex 32)
-POSTGRES_PASSWORD=$(openssl rand -base64 16)
-MINIO_PASSWORD=$(openssl rand -base64 16)
-REDIS_PASSWORD=$(openssl rand -base64 16)
+# ============================================
+# STEP 2: SECRETS
+# ============================================
+log_step "Шаг 2/5: Пароли и Ключи"
+ask_generate "POSTGRES_PASSWORD" "Пароль БД" "POSTGRES_PASSWORD" 16
+ask_generate "MINIO_ROOT_PASSWORD" "Пароль MinIO (S3)" "MINIO_ROOT_PASSWORD" 16
+ask_generate "SECRET_KEY" "JWT Secret Key" "SECRET_KEY" 32
+ask "BOT_TOKEN" "" "Токен бота от @BotFather" "BOT_TOKEN"
+ask "ADMIN_IDS" "" "Telegram ID админов" "ADMIN_IDS"
 
-echo -n "Telegram Bot Token: "
-read BOT_TOKEN
-echo -n "Admin Telegram ID: "
-read ADMIN_IDS
+# ============================================
+# STEP 3: CONFIGURATION GENERATION
+# ============================================
+log_step "Шаг 3/5: Генерация Конфигурации"
 
-if [ -z "$BOT_TOKEN" ]; then
-    echo -e "${RED}Ошибка: Токен бота обязателен!${NC}"
-    exit 1
-fi
+# 3.1 Nginx Config Generation (ИСПРАВЛЕНО: используем имена контейнеров)
+log_info "Генерация Nginx-конфига для $PUBLIC_HOST..."
+cat > nginx/launcher.conf << EOF
+# Базовая конфигурация Nginx для $PUBLIC_HOST
+server {
+    listen 80;
+    server_name $PUBLIC_HOST;
 
-# 4. КОНФИГУРАЦИЯ (.env)
-echo -e "\n${YELLOW}▶ Шаг 4: Создание конфигов${NC}"
+    access_log /var/log/nginx/launcher_access.log;
+    error_log /var/log/nginx/launcher_error.log;
+    client_max_body_size 500M;
 
-# Основной .env
+    # Backend API
+    location /api/ {
+        proxy_pass http://pixellauncher_backend:8000/; # <-- ИСПРАВЛЕНО
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 600;
+        proxy_read_timeout 600;
+        send_timeout 600;
+    }
+
+    # MinIO S3 API (Для загрузки файлов)
+    location /storage/ {
+        proxy_pass http://pixellauncher_minio:9000/; # <-- ИСПРАВЛЕНО
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_connect_timeout 600;
+        proxy_read_timeout 600;
+        send_timeout 600;
+    }
+
+    # Admin Web (React)
+    location / {
+        proxy_pass http://pixellauncher_admin_web:5173/; # <-- ИСПРАВЛЕНО
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+
+# 3.2 Основной .env
+FRONTEND_URL="http://$PUBLIC_HOST"
 cat > .env << EOF
 POSTGRES_USER=launcher
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 POSTGRES_DB=pixel_launcher
 REDIS_PASSWORD=$REDIS_PASSWORD
 MINIO_ROOT_USER=admin
-MINIO_ROOT_PASSWORD=$MINIO_PASSWORD
+MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
 MINIO_USE_SSL=false
 SECRET_KEY=$SECRET_KEY
 BOT_TOKEN=$BOT_TOKEN
 ADMIN_IDS=$ADMIN_IDS
 DEVELOPER_CHAT_ID=$ADMIN_IDS
-CORS_ORIGINS=http://$USER_IP,http://$USER_IP:80,http://localhost:5173
-ADMIN_FRONTEND_URL=http://$USER_IP
+CORS_ORIGINS=$FRONTEND_URL,http://localhost:5173
+ADMIN_FRONTEND_URL=$FRONTEND_URL
 EOF
 
-# Admin-Web .env
-echo "VITE_API_URL=http://$USER_IP/api" > admin-web/.env
+# 3.3 Admin-Web .env
+echo "VITE_API_URL=$FRONTEND_URL/api" > admin-web/.env
 
-# Nginx Config (Dynamic)
-cat > nginx.conf << EOF
-server {
-    listen 80;
-    server_name $USER_IP;
-    client_max_body_size 500M;
-    access_log /var/log/nginx/access.log;
-    
-    # 1. Admin Panel
-    location / {
-        root /var/www/admin;
-        index index.html;
-        try_files \$uri \$uri/ /index.html;
-    }
-    # 2. Backend API
-    location /api/ {
-        proxy_pass http://backend:8000/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-    }
-    # 3. MinIO Files
-    location /objects/ {
-        proxy_pass http://minio:9000/launcher-files/objects/;
-        proxy_set_header Host minio:9000;
-    }
-}
-EOF
+# 3.4 Исправление Docker Compose (УБРАТЬ ПОРТЫ 8000 и 5173!)
+log_info "Удаление пробросов портов 8000/5173 из docker-compose.yml для безопасности..."
+sed -i '/^.*ports:$/,/^.*:8000"$/d' docker-compose.yml || true
+sed -i '/^.*ports:$/,/^.*:5173"$/d' docker-compose.yml || true
+# ============================================
+# STEP 4: NGINX DEPLOYMENT & SSL
+# ============================================
+log_step "Шаг 4/5: Активация Nginx на хосте"
 
-echo -e "${GREEN}✓ Конфигурация создана${NC}"
+log_info "Копирование и активация конфига Nginx..."
+sudo cp nginx/launcher.conf /etc/nginx/sites-available/launcher
+sudo ln -sf /etc/nginx/sites-available/launcher /etc/nginx/sites-enabled/default # Использование default
+    sudo systemctl reload nginx
+# ============================================
+# STEP 5: DOCKER DEPLOY & INIT
+# ============================================
+log_step "Шаг 5/5: Запуск и Инициализация"
 
-# 5. ЗАПУСК
-echo -e "\n${YELLOW}▶ Шаг 5: Запуск и Инициализация${NC}"
-echo "Остановка старых контейнеров..."
 docker compose down --remove-orphans || true
-
-echo "Сборка и запуск..."
+log_info "Сборка и запуск контейнеров..."
 docker compose up -d --build
 
-echo "⏳ Ожидание запуска Бэкенда (10 сек)..."
-sleep 10
+echo "⏳ Ожидание запуска Бэкенда (15 сек)..."
+sleep 15
 
-echo "🔧 Автоматическая настройка MinIO (создание бакета + Public Policy)..."
-# ЗАПУСКАЕМ НАШ НОВЫЙ СКРИПТ ВНУТРИ КОНТЕЙНЕРА
-docker compose exec -T backend python tools/init_minio.py || echo -e "${RED}Warning: MinIO init failed${NC}"
+log_info "🔧 Авто-настройка MinIO (бакет + Public Policy)..."
+docker compose exec -T backend python tools/init_minio.py || log_error "MinIO Init Failed"
 
-# Накат миграций БД
-echo "🗄️ Применение миграций БД..."
-docker compose exec -T backend alembic upgrade head || echo -e "${RED}Warning: Migrations failed${NC}"
+log_info "🗄️ Применение миграций БД..."
+docker compose exec -T backend alembic upgrade head || log_error "Миграции БД не применены"
 
-echo -e "\n${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}  ║                 УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА                ║${NC}"
-echo -e "${GREEN}  ╚════════════════════════════════════════════════════════════╝${NC}"
+# ============================================
+# FINAL REPORT
+# ============================================
 echo ""
-echo -e "Админка:       http://$USER_IP/admin"
-echo -e "MinIO Console: http://$USER_IP:9001 (User: admin / Pass: $MINIO_PASSWORD)"
+echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║               УСТАНОВКА УСПЕШНО ЗАВЕРШЕНА!                 ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${GREEN}✓ Бакет 'launcher-files' создан и настроен автоматически.${NC}"
+echo -e "  ${CYAN}АДМИНКА:${NC}       http://$PUBLIC_HOST/"
+echo -e "  ${CYAN}MinIO Console:${NC} http://$PUBLIC_HOST:9001"
+echo ""
+
+# SSL
+if [ "$PUBLIC_HOST" != "$DETECTED_IP" ]; then
+    echo -e "${YELLOW}Установить SSL-сертификат (Let's Encrypt)?${NC}"
+    echo -n "[Y/n]: "
+    read INSTALL_SSL
+    if [ "$INSTALL_SSL" != "n" ] && [ "$INSTALL_SSL" != "N" ]; then
+        sudo certbot --nginx -d "$PUBLIC_HOST" --non-interactive --agree-tos --register-unsafely-without-email || log_error "SSL FAILED"
+    fi
+fi
