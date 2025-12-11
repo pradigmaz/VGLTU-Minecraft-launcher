@@ -2,8 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   UploadCloud, ArrowLeft, CheckCircle, AlertTriangle, Loader2, 
-  Folder, Box, Cpu, FileCode, ChevronDown, ChevronUp, 
-  HelpCircle, X, BookOpen 
+  Folder, Monitor, Server, Globe, ChevronDown, ChevronUp, Box, Cpu, FileCode
 } from 'lucide-react';
 import api from '../lib/api';
 import { useLanguage } from '../lib/LanguageContext';
@@ -24,7 +23,6 @@ export default function UploadPage() {
   // UX State
   const [isDragging, setIsDragging] = useState(false);
   const [showGuide, setShowGuide] = useState(true);
-  const [showFaqModal, setShowFaqModal] = useState(false); // <--- New State for Modal
 
   const [formData, setFormData] = useState({
     title: '',
@@ -192,6 +190,7 @@ export default function UploadPage() {
                                         <option value="forge">Forge</option>
                                         <option value="fabric">Fabric</option>
                                         <option value="neoforge">NeoForge</option>
+                                        {/* Vanilla Removed */}
                                     </select>
                                     <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-muted">
                                         <ChevronDown size={14} />
@@ -370,106 +369,12 @@ export default function UploadPage() {
                             <AlertTriangle className="shrink-0" size={16} />
                             <span>{t('warningMixed')}</span>
                         </div>
-
-                        {/* NEW FAQ TRIGGER BUTTON */}
-                        <button
-                            type="button"
-                            onClick={() => setShowFaqModal(true)}
-                            className="w-full py-2 px-4 bg-primary/10 hover:bg-primary/20 text-primary rounded-lg text-sm font-bold transition-colors flex items-center justify-center gap-2"
-                        >
-                            <HelpCircle size={16} />
-                            FAQ & Troubleshooting
-                        </button>
                     </div>
                 )}
             </div>
         </div>
+
       </div>
-
-      {/* NEW FAQ MODAL OVERLAY */}
-      {showFaqModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-              <div className="bg-surface border border-border w-full max-w-2xl max-h-[85vh] rounded-2xl shadow-2xl flex flex-col animate-in zoom-in-95 duration-200">
-                  
-                  {/* Modal Header */}
-                  <div className="p-6 border-b border-border flex justify-between items-center bg-background/50 rounded-t-2xl">
-                      <h2 className="text-xl font-bold flex items-center gap-2 text-text">
-                          <BookOpen size={24} className="text-primary"/> 
-                          FAQ & Best Practices
-                      </h2>
-                      <button 
-                          onClick={() => setShowFaqModal(false)}
-                          className="p-2 hover:bg-black/5 dark:hover:bg-white/5 rounded-full transition-colors text-muted hover:text-text"
-                      >
-                          <X size={24} />
-                      </button>
-                  </div>
-
-                  {/* Modal Content - Scrollable */}
-                  <div className="p-6 overflow-y-auto space-y-6 text-text">
-                      
-                      {/* Section 1: Structure */}
-                      <section>
-                          <h3 className="text-lg font-bold mb-3 flex items-center gap-2 text-primary">
-                              <Folder size={18} /> 1. Структура Архива
-                          </h3>
-                          <p className="text-sm text-muted mb-2">Для корректной работы сервера и лаунчера разложите моды по следующим папкам:</p>
-                          <div className="bg-black/5 dark:bg-white/5 p-4 rounded-lg font-mono text-sm space-y-2 border border-border">
-                              <div className="flex gap-2"><span className="font-bold text-green-600">/mods/</span> <span className="text-muted opacity-80">— Универсальные (Thermal, JEI, Create). Устанавливаются ВЕЗДЕ.</span></div>
-                              <div className="flex gap-2"><span className="font-bold text-blue-600">/client-mods/</span> <span className="text-muted opacity-80">— Только клиент (OptiFine, Sodium, Maps). На сервер НЕ попадут.</span></div>
-                              <div className="flex gap-2"><span className="font-bold text-orange-600">/server-mods/</span> <span className="text-muted opacity-80">— Только сервер (Spark, Backup, AuthMe). Игрокам НЕ скачаются.</span></div>
-                              <div className="flex gap-2"><span className="font-bold text-gray-600">/config/</span> <span className="text-muted opacity-80">— Конфиги. Обязательны для синхронизации ID блоков.</span></div>
-                          </div>
-                      </section>
-
-                      <hr className="border-border" />
-
-                      {/* Section 2: Troubleshooting */}
-                      <section className="space-y-4">
-                          <h3 className="text-lg font-bold flex items-center gap-2 text-red-500">
-                              <AlertTriangle size={18} /> Troubleshooting
-                          </h3>
-                          
-                          <div className="space-y-3">
-                              <div className="p-4 border border-border rounded-lg bg-red-500/5">
-                                  <h4 className="font-bold text-sm mb-1 text-red-600 dark:text-red-400">🔥 Сервер падает при запуске?</h4>
-                                  <p className="text-sm text-muted">
-                                      Ошибка <code>java.lang.NoClassDefFoundError: net/minecraft/client/...</code>?<br/>
-                                      Это значит, что в папке <code>mods/</code> (или <code>server-mods/</code>) лежит <strong>клиентский мод</strong> (например, OptiFine, Sodium, Iris). Переместите их в папку <code>client-mods/</code>.
-                                  </p>
-                              </div>
-
-                              <div className="p-4 border border-border rounded-lg">
-                                  <h4 className="font-bold text-sm mb-1 text-orange-600 dark:text-orange-400">⚠️ Игрок видит "Mod Mismatch"?</h4>
-                                  <p className="text-sm text-muted">
-                                      Версии модов на клиенте и сервере отличаются. Убедитесь, что вы загрузили 
-                                      абсолютно одинаковые файлы .jar в папку <code>mods/</code>. 
-                                  </p>
-                              </div>
-                          </div>
-                      </section>
-
-                      <div className="bg-blue-500/10 text-blue-700 dark:text-blue-300 p-4 rounded-lg text-sm border border-blue-500/20 flex gap-2">
-                          <CheckCircle size={18} className="shrink-0 mt-0.5" />
-                          <div>
-                              <strong>Pro Tip:</strong> Соберите сборку локально. Запустите чистый сервер и клиент. 
-                              Если всё работает локально — смело загружайте архив сюда.
-                          </div>
-                      </div>
-                  </div>
-
-                  {/* Modal Footer */}
-                  <div className="p-4 border-t border-border bg-background/50 rounded-b-2xl flex justify-end">
-                      <button 
-                          onClick={() => setShowFaqModal(false)}
-                          className="px-6 py-2 bg-primary text-white font-bold rounded-lg hover:bg-primary-hover transition-colors shadow-lg shadow-primary/20"
-                      >
-                          {t('close')}
-                      </button>
-                  </div>
-              </div>
-          </div>
-      )}
     </div>
   );
 }
