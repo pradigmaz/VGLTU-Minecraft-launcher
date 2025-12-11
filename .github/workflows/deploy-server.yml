@@ -26,6 +26,7 @@ jobs:
       - name: Downcase IMAGE_NAME
         run: |
           echo "IMAGE_NAME=${GITHUB_REPOSITORY,,}" >>${GITHUB_ENV}
+          echo "Lowercased IMAGE_NAME: ${GITHUB_REPOSITORY,,}"
 
       - name: Log in to the Container registry
         uses: docker/login-action@v3
