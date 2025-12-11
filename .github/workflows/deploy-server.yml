@@ -4,10 +4,10 @@ on:
   push:
     branches: [ "main" ]
     paths:
-      - 'server/**'
-      - 'admin-web/**'
-      - 'docker-compose.yml'
-      - 'nginx/**'
+      - 'vgltu_launcher/server/**'
+      - 'vgltu_launcher/admin-web/**'
+      - 'vgltu_launcher/docker-compose.yml'
+      - 'vgltu_launcher/nginx/**'
 
 env:
   REGISTRY: ghcr.io
@@ -36,8 +36,8 @@ jobs:
       - name: Build and push Backend
         uses: docker/build-push-action@v5
         with:
-          context: ./server
-          file: ./server/Dockerfile
+          context: ./vgltu_launcher/server
+          file: ./vgltu_launcher/server/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/backend:latest
 
@@ -45,8 +45,8 @@ jobs:
       - name: Build and push Admin Web
         uses: docker/build-push-action@v5
         with:
-          context: ./admin-web
-          file: ./admin-web/Dockerfile
+          context: ./vgltu_launcher/admin-web
+          file: ./vgltu_launcher/admin-web/Dockerfile
           push: true
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}/admin-web:latest
 
