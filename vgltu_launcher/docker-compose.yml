@@ -6,10 +6,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-launcher}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-pixel_launcher}
-    ports:
-      - "5432:5432"
     volumes:
-      - ./docker-data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-launcher} -d ${POSTGRES_DB:-pixel_launcher}"]
       interval: 5s
@@ -25,9 +23,6 @@ services:
     image: minio/minio
     container_name: pixellauncher_minio
     command: server /data --console-address ":9001"
-    ports:
-      - "9000:9000"
-      - "9001:9001"
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
@@ -50,8 +45,6 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
     command: sh -c 'if [ -n "$$REDIS_PASSWORD" ]; then redis-server --requirepass "$$REDIS_PASSWORD"; else redis-server; fi'
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "sh", "-c", "if [ -n \"$$REDIS_PASSWORD\" ]; then redis-cli -a \"$$REDIS_PASSWORD\" ping; else redis-cli ping; fi"]
       interval: 5s
@@ -78,10 +71,11 @@ services:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-admin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
       MINIO_USE_SSL: ${MINIO_USE_SSL:-false}
-      STORAGE_BASE_URL: ${STORAGE_BASE_URL:-http://localhost:9000/launcher-files}
       SECRET_KEY: ${SECRET_KEY}
       ADMIN_IDS: ${ADMIN_IDS}
       DEVELOPER_CHAT_ID: ${DEVELOPER_CHAT_ID}
+      BOT_CALLBACK_SECRET: ${BOT_CALLBACK_SECRET}
+      SFTP_ENCRYPTION_KEY: ${SFTP_ENCRYPTION_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -118,6 +112,7 @@ services:
       BOT_TOKEN: ${BOT_TOKEN}
       BACKEND_URL: "http://backend:8000"
       DEVELOPER_CHAT_ID: ${DEVELOPER_CHAT_ID}
+      BOT_CALLBACK_SECRET: ${BOT_CALLBACK_SECRET}
     depends_on:
       - backend
     logging:
@@ -125,3 +120,6 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+
+volumes:
+  postgres_data:

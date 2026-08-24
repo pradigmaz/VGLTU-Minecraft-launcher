@@ -74,7 +74,7 @@ chmod +x install.sh
     cp .env.example .env
     nano .env
     ```
-    *Обязательно смените стандартные пароли и сгенерируйте надежный `SECRET_KEY`!*
+    *Обязательно смените стандартные пароли и задайте `SECRET_KEY`, `BOT_CALLBACK_SECRET` и `SFTP_ENCRYPTION_KEY`. Последний ключ нужен для шифрования SFTP/RCON-паролей и не должен меняться после запуска.*
 
 2.  **Запуск контейнеров:**
     ```bash
@@ -98,7 +98,7 @@ chmod +x install.sh
 | **Логи** | `docker compose logs -f [service]` (backend, bot, admin-web) |
 | **Полный сброс** | `docker compose down -v` (⚠️ Удалит все данные!) |
 
-> Подробнее о командах Docker читайте в [DOCKER_COMMANDS.md](DOCKER_COMMANDS.md).
+> Подробнее о командах Docker читайте в [DOCKER_COMMANDS.md](vgltu_launcher/DOCKER_COMMANDS.md).
 
 ---
 
@@ -161,8 +161,8 @@ sudo certbot --nginx -d your-domain.com
 |--------|-----------------|------------------------------|
 | Admin Panel | 5173 | `https://your-domain.com/` |
 | Backend API | 8000 | `https://your-domain.com/api/` |
-| MinIO API | 9000 | `https://your-domain.com/storage/` |
-| MinIO Console | 9001 | `http://your-ip:9001` (опционально) |
+| MinIO API | 9000 | Только внутренняя сеть Docker |
+| MinIO Console | 9001 | Только внутренняя сеть Docker |
 
 ---
 
@@ -171,7 +171,7 @@ sudo certbot --nginx -d your-domain.com
 Подробные инструкции и лучшие практики по развертыванию на "чистом" сервере описаны в файле [DEPLOY.md](DEPLOY.md).
 
 **Краткий чек-лист перед запуском:**
-- [ ] `.env` файл настроен, пароли изменены.
+- [ ] `.env` файл настроен, пароли изменены, а `BOT_CALLBACK_SECRET` и `SFTP_ENCRYPTION_KEY` сгенерированы.
 - [ ] `branding.json` актуализирован.
 - [ ] Firewall (UFW) настроен (открыты порты 80, 443, 22).
 - [ ] SSL сертификат получен и работает.

@@ -19,9 +19,11 @@ REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 redis_client = redis.from_url(REDIS_URL, encoding="utf-8", decode_responses=True)
 
 # --- 3. MINIO ---
-MINIO_URL = os.getenv("MINIO_URL", "localhost:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER", "admin")
-MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD", "supersecretkey")
+MINIO_URL = os.getenv("MINIO_URL")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER")
+MINIO_SECRET_KEY = os.getenv("MINIO_ROOT_PASSWORD")
+if not all((MINIO_URL, MINIO_ACCESS_KEY, MINIO_SECRET_KEY)):
+    raise RuntimeError("MINIO_URL, MINIO_ROOT_USER and MINIO_ROOT_PASSWORD are required")
 MINIO_USE_SSL = os.getenv("MINIO_USE_SSL", "false").lower() == "true"
 
 minio_client = Minio(

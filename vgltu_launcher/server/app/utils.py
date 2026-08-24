@@ -14,6 +14,9 @@ import io
 import hashlib
 import tempfile
 import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Секретный ключ — ОБЯЗАТЕЛЕН в проде
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -151,9 +154,10 @@ async def validate_uploaded_archive(file: UploadFile) -> tuple[tempfile.SpooledT
         
     except HTTPException:
         raise
-    except Exception as e:
+    except Exception:
         temp_file.close()
-        raise HTTPException(status_code=500, detail=f"File processing error: {str(e)}")
+        logger.exception("Archive validation failed")
+        raise HTTPException(status_code=500, detail="File processing failed")
 
 def calculate_sha256(data: bytes) -> str:
     sha256_hash = hashlib.sha256()

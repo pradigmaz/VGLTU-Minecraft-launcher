@@ -1,5 +1,5 @@
 # app/routes/auth.py
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -10,6 +10,8 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 import uuid
 import os
+import hmac
+from typing import Annotated
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
 
@@ -17,6 +19,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 ADMIN_IDS = [int(id) for id in os.getenv("ADMIN_IDS", "").split(",") if id]
 BOT_USERNAME = os.getenv("BOT_USERNAME", "vgltuminecraftbot")
+BOT_CALLBACK_SECRET = os.getenv("BOT_CALLBACK_SECRET")
 
 class BotCallback(BaseModel):
     code: str
@@ -32,7 +35,18 @@ async def get_login_code(request: Request):
     return {"code": code, "bot_link": f"https://t.me/{BOT_USERNAME}?start={code}"}
 
 @router.post("/callback")
-async def bot_callback(data: BotCallback, db: AsyncSession = Depends(get_db)):
+async def bot_callback(
+    data: BotCallback,
+    db: AsyncSession = Depends(get_db),
+    callback_secret: Annotated[str | None, Header(alias="X-Bot-Callback-Secret")] = None,
+):
+    if (
+        not BOT_CALLBACK_SECRET
+        or not callback_secret
+        or not hmac.compare_digest(callback_secret, BOT_CALLBACK_SECRET)
+    ):
+        raise HTTPException(status_code=403, detail="Bot callback is not authorized")
+
     status = await redis_client.get(f"auth_code:{data.code}")
     if not status:
         raise HTTPException(status_code=404, detail="Code expired or invalid")

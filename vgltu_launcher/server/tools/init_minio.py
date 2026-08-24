@@ -1,12 +1,12 @@
 import os
 import sys
-import json
 import logging
 
 # Добавляем путь к приложению
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.database import minio_client, BUCKET_NAME
+from minio.error import S3Error
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("MinIO-Init")
@@ -22,23 +22,16 @@ def init_minio():
         else:
             logger.info(f"   Bucket '{BUCKET_NAME}' already exists.")
 
-        # 2. Настраиваем Public Policy (Read Only)
-        # Это позволяет лаунчеру скачивать файлы без авторизации
-        policy = {
-            "Version": "2012-10-17",
-            "Statement": [
-                {
-                    "Effect": "Allow",
-                    "Principal": {"AWS": ["*"]},
-                    "Action": ["s3:GetObject"],
-                    "Resource": [f"arn:aws:s3:::{BUCKET_NAME}/*"]
-                }
-            ]
-        }
-        
-        logger.info("   Applying public read policy...")
-        minio_client.set_bucket_policy(BUCKET_NAME, json.dumps(policy))
-        logger.info("✅ Success! Bucket is fully configured.")
+        # Launcher downloads are served by the backend after side filtering.
+        try:
+            minio_client.delete_bucket_policy(BUCKET_NAME)
+            logger.info("   Removed bucket policy; object storage is private.")
+        except S3Error as error:
+            if error.code != "NoSuchBucketPolicy":
+                raise
+            logger.info("   Bucket has no public policy.")
+
+        logger.info("✅ Success! Bucket is private.")
         
     except Exception as e:
         logger.error(f"❌ Failed to configure MinIO: {e}")

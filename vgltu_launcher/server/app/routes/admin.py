@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete, or_, func, update
 from starlette.concurrency import run_in_threadpool
 from app.database import async_session_factory, minio_client
+from app.file_visibility import archive_file_side, default_file_side
 from app.models import Instance, File as FileModel, instance_files, User, SideType
 from app.utils import calculate_sha256, validate_uploaded_archive, get_current_admin, generate_instance_id, get_db, validate_instance_id, validate_file_path
 import rarfile
@@ -27,7 +28,7 @@ def decode_archive_filename(filename: str, archive_type: str) -> str:
             return filename.encode('cp437').decode('cp866')
         else:
             return filename
-    except:
+    except UnicodeError:
         return filename
 
 @router.get("/instances", response_model=List[AdminInstanceView])
@@ -87,7 +88,8 @@ async def delete_instance(
     for file_obj in orphans:
         try:
             await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, file_obj.s3_path)
-        except: pass
+        except Exception:
+            logger.warning("Could not remove orphan object %s", file_obj.s3_path, exc_info=True)
         await db.delete(file_obj)
         deleted_files_count += 1
         deleted_size_bytes += file_obj.size
@@ -128,22 +130,7 @@ async def upload_instance_zip(
                 if not validate_file_path(fixed_filename): continue
                 if "__MACOSX" in fixed_filename or ".DS_Store" in fixed_filename: continue
 
-                # === SIDE LOGIC ===
-                side = SideType.BOTH
-                final_path = fixed_filename
-                if fixed_filename.startswith("client-mods/"):
-                    side = SideType.CLIENT
-                    final_path = fixed_filename.replace("client-mods/", "mods/", 1)
-                elif fixed_filename.startswith("server-mods/"):
-                    side = SideType.SERVER
-                    final_path = fixed_filename.replace("server-mods/", "mods/", 1)
-                elif fixed_filename.startswith("shaderpacks/"):
-                    side = SideType.CLIENT
-                elif fixed_filename.startswith("resourcepacks/"):
-                    side = SideType.CLIENT
-                
-                if "tlskincape" in fixed_filename.lower() or "optifine" in fixed_filename.lower():
-                    side = SideType.CLIENT
+                side, final_path = archive_file_side(fixed_filename)
 
                 file_data = archive_obj.read(file_info)
                 file_hash = calculate_sha256(file_data)
@@ -153,10 +140,6 @@ async def upload_instance_zip(
                 if not existing:
                     db.add(FileModel(sha256=file_hash, filename=os.path.basename(final_path), size=file_info.file_size, s3_path=s3_path))
                     await db.flush()
-                    try: 
-                        if not await run_in_threadpool(minio_client.bucket_exists, BUCKET_NAME):
-                            await run_in_threadpool(minio_client.make_bucket, BUCKET_NAME)
-                    except: pass
                     await run_in_threadpool(minio_client.put_object, BUCKET_NAME, s3_path, io.BytesIO(file_data), length=len(file_data))
                     uploaded_paths.append(s3_path)
                     processed += 1
@@ -170,14 +153,15 @@ async def upload_instance_zip(
                     side=side
         ))
         await db.commit() 
-    except Exception as e:
+    except Exception:
         await db.rollback()
         for p in uploaded_paths:
             try:
-                minio_client.remove_object(BUCKET_NAME, p)
-            except:
-                pass
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+                await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, p)
+            except Exception:
+                logger.warning("Could not remove failed upload object %s", p, exc_info=True)
+        logger.exception("Archive upload failed")
+        raise HTTPException(status_code=500, detail="Upload failed")
     
     return {"status": "success", "stats": {"new_files_uploaded": processed, "files_deduplicated": skipped}}
 
@@ -250,7 +234,8 @@ async def delete_file(
     for file_obj in orphans:
         try:
             await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, file_obj.s3_path)
-        except: pass
+        except Exception:
+            logger.warning("Could not remove orphan object %s", file_obj.s3_path, exc_info=True)
         await db.delete(file_obj)
     
     await db.commit()
@@ -300,7 +285,8 @@ async def upload_single_file(
     await db.execute(instance_files.insert().values(
         instance_id=instance_id,
         file_hash=file_hash,
-        path=path
+        path=path,
+        side=default_file_side(path),
     ))
     
     await db.commit()
@@ -328,15 +314,19 @@ async def get_config_content(
         
     try:
         response = await run_in_threadpool(minio_client.get_object, BUCKET_NAME, file_obj.s3_path)
-        content = response.read()
-        response.close()
-        response.release_conn()
         try:
-            return content.decode('utf-8')
-        except:
-            return content.decode('cp1251')
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Read error: {e}")
+            content = await run_in_threadpool(response.read)
+        finally:
+            response.close()
+            response.release_conn()
+    except Exception:
+        logger.exception("Could not read config %s for instance %s", path, instance_id)
+        raise HTTPException(status_code=500, detail="Could not read config")
+
+    try:
+        return content.decode('utf-8')
+    except UnicodeDecodeError:
+        return content.decode('cp1251')
 
 @router.put("/instances/{instance_id}/config")
 async def update_config_content(
@@ -376,7 +366,8 @@ async def update_config_content(
     await db.execute(instance_files.insert().values(
         instance_id=instance_id,
         file_hash=file_hash,
-        path=path
+        path=path,
+        side=SideType.SERVER,
     ))
     
     orphan_stmt = select(FileModel).outerjoin(
@@ -387,7 +378,8 @@ async def update_config_content(
     for file_obj in orphans:
         try:
             await run_in_threadpool(minio_client.remove_object, BUCKET_NAME, file_obj.s3_path)
-        except: pass
+        except Exception:
+            logger.warning("Could not remove orphan object %s", file_obj.s3_path, exc_info=True)
         await db.delete(file_obj)
 
     await db.commit()

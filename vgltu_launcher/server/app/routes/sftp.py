@@ -1,20 +1,36 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.database import async_session_factory
-from app.models import SFTPConnection
-from app.schemas import SFTPConfigCreate, SFTPConfigResponse 
+from app.models import Instance, SFTPConnection, User
+from app.schemas import SFTPConfigCreate
 from app.services.sftp_sync import SFTPSyncService
-# from app.utils import encrypt_password
+from app.security import encrypt_sftp_secret
+from app.utils import get_current_admin
 
 router = APIRouter(prefix="/api/admin/sftp", tags=["SFTP"])
+logger = logging.getLogger(__name__)
 
 async def get_db():
     async with async_session_factory() as session:
         yield session
 
+
+async def _require_instance(instance_id: str, db: AsyncSession) -> None:
+    instance = (await db.execute(select(Instance).where(Instance.id == instance_id))).scalars().first()
+    if not instance:
+        raise HTTPException(status_code=404, detail="Instance not found")
+
+
 @router.get("/{instance_id}")
-async def get_config(instance_id: str, db: AsyncSession = Depends(get_db)):
+async def get_config(
+    instance_id: str,
+    db: AsyncSession = Depends(get_db),
+    _current_admin: User = Depends(get_current_admin),
+):
+    await _require_instance(instance_id, db)
     stmt = select(SFTPConnection).where(SFTPConnection.instance_id == instance_id)
     config = (await db.execute(stmt)).scalars().first()
     
@@ -47,28 +63,28 @@ async def get_config(instance_id: str, db: AsyncSession = Depends(get_db)):
 async def create_or_update_config(
     instance_id: str, 
     config: SFTPConfigCreate, 
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    _current_admin: User = Depends(get_current_admin),
 ):
+    await _require_instance(instance_id, db)
     stmt = select(SFTPConnection).where(SFTPConnection.instance_id == instance_id)
     existing = (await db.execute(stmt)).scalars().first()
     
-    config_dict = config.dict(exclude_unset=True)
+    config_dict = config.model_dump(exclude_unset=True)
     
-    # === ЛОГИКА СОХРАНЕНИЯ ПАРОЛЕЙ ===
-    # Если пароль пришел как "********", значит юзер его не менял -> удаляем из обновления
-    if config_dict.get("password") == "********":
-        del config_dict["password"]
-    elif config_dict.get("password"):
-        # TODO: Здесь вставь шифрование!
-        # config_dict["password"] = encrypt_password(config_dict["password"])
-        pass 
+    for field in ("password", "rcon_password"):
+        value = config_dict.get(field)
+        if value in (None, "", "********"):
+            config_dict.pop(field, None)
+        else:
+            try:
+                config_dict[field] = encrypt_sftp_secret(value)
+            except RuntimeError as error:
+                logger.error("Cannot encrypt SFTP credential: %s", error)
+                raise HTTPException(status_code=503, detail="SFTP encryption is not configured") from error
 
-    if config_dict.get("rcon_password") == "********":
-        del config_dict["rcon_password"]
-    elif config_dict.get("rcon_password"):
-        # TODO: Здесь вставь шифрование!
-        # config_dict["rcon_password"] = encrypt_password(config_dict["rcon_password"])
-        pass
+    if not existing and "password" not in config_dict:
+        raise HTTPException(status_code=422, detail="SFTP password is required")
 
     if existing:
         for key, value in config_dict.items():
@@ -82,10 +98,16 @@ async def create_or_update_config(
     return {"status": "saved"}
 
 @router.post("/{instance_id}/sync")
-async def run_sync(instance_id: str, db: AsyncSession = Depends(get_db)):
+async def run_sync(
+    instance_id: str,
+    db: AsyncSession = Depends(get_db),
+    _current_admin: User = Depends(get_current_admin),
+):
+    await _require_instance(instance_id, db)
     service = SFTPSyncService(db)
     try:
         logs = await service.sync_instance(instance_id)
         return {"status": "success", "logs": logs}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("SFTP sync failed for instance %s", instance_id)
+        raise HTTPException(status_code=502, detail="SFTP sync failed")

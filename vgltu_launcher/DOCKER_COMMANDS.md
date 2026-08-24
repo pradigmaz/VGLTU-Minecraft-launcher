@@ -2,6 +2,8 @@
 
 ## Основные команды
 
+Перед первым запуском скопируйте `.env.example` в `.env`, замените все значения-заглушки и сгенерируйте `BOT_CALLBACK_SECRET` и `SFTP_ENCRYPTION_KEY`. Ключ SFTP/RCON можно получить командой из `.env.example`; после появления подключений менять его нельзя без миграции данных.
+
 ### Запуск контейнеров
 ```bash
 # Запустить все сервисы (PostgreSQL, Redis, MinIO, Backend)
@@ -123,15 +125,9 @@ docker-compose exec redis redis-cli FLUSHALL
 
 ### MinIO
 ```bash
-# Консоль MinIO доступна по адресу: http://localhost:9001
-# Логин: admin
-# Пароль: supersecretkey
-
-# Создать bucket через CLI
-docker-compose exec minio mc mb minio/pixellauncher-storage
-
-# Список buckets
-docker-compose exec minio mc ls minio/
+# MinIO не публикуется на хост и не должен проксироваться через Nginx.
+# Бакет создается и делаетcя приватным при запуске backend.
+docker compose logs backend --tail 50
 ```
 
 ## Очистка и обслуживание
@@ -183,25 +179,18 @@ docker-compose exec postgres pg_isready -U launcher
 docker-compose exec redis redis-cli ping
 ```
 
-### Создание тестового пользователя
+### Создание игрового пользователя
 ```bash
-# Создать пользователя через API
-curl -X POST http://localhost:8000/api/dev/create_user \
+# Нужна действующая JWT-сессия администратора. Пароль не передается и не хранится в открытом виде.
+curl -X POST http://localhost:8000/api/admin/players \
+  -H "Authorization: Bearer <admin-jwt>" \
   -H "Content-Type: application/json" \
-  -d '{"username":"TestPlayer","telegram_id":12345}'
+  -d '{"username":"TestPlayer","password":"change-this-password"}'
 ```
 
 ## Переменные окружения
 
-Все переменные окружения находятся в `docker-compose.yml`:
-
-```yaml
-DATABASE_URL: postgresql+asyncpg://launcher:dev_secret_password@postgres/pixel_launcher
-REDIS_URL: redis://redis:6379
-MINIO_URL: minio:9000
-MINIO_ROOT_USER: admin
-MINIO_ROOT_PASSWORD: supersecretkey
-```
+Используйте `.env`, созданный из `.env.example`; не храните настоящие секреты в этом документе. Для backend обязательны `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_ROOT_PASSWORD` и `SECRET_KEY`. Перед созданием SFTP/RCON-подключений задайте `SFTP_ENCRYPTION_KEY`; для входа админки через бота задайте `BOT_CALLBACK_SECRET`.
 
 Для изменения переменных отредактируй `docker-compose.yml` и выполни:
 ```bash

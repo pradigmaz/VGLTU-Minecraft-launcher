@@ -1,6 +1,7 @@
 import asyncio
 import os
 import logging
+from html import escape
 import aiohttp
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart, Command, CommandObject
@@ -14,6 +15,7 @@ if not BOT_TOKEN:
     raise RuntimeError("BOT_TOKEN environment variable is required!")
 BACKEND_URL = os.getenv("BACKEND_URL", "http://backend:8000")
 DEVELOPER_CHAT_ID = os.getenv("DEVELOPER_CHAT_ID")
+BOT_CALLBACK_SECRET = os.getenv("BOT_CALLBACK_SECRET")
 
 # Timeout для HTTP запросов (секунды)
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=10)
@@ -63,9 +65,18 @@ async def command_start_handler(message: Message, command: CommandObject):
         "username": message.from_user.username or "Unknown"
     }
 
+    if not BOT_CALLBACK_SECRET:
+        logging.error("BOT_CALLBACK_SECRET is not configured")
+        await message.answer("⚠️ Авторизация панели временно недоступна.")
+        return
+
     async with aiohttp.ClientSession(timeout=REQUEST_TIMEOUT) as session:
         try:
-            async with session.post(f"{BACKEND_URL}/api/auth/callback", json=user_data) as resp:
+            async with session.post(
+                f"{BACKEND_URL}/api/auth/callback",
+                json=user_data,
+                headers={"X-Bot-Callback-Secret": BOT_CALLBACK_SECRET},
+            ) as resp:
                 if resp.status == 200:
                     data = await resp.json()
                     role = data.get("role", "user")
@@ -113,12 +124,12 @@ async def feedback_handler(message: Message):
     feedback_cooldowns[user_id] = now
 
     try:
-        username = f"@{message.from_user.username}" if message.from_user.username else "No Username"
-        user_link = f"<a href='tg://user?id={message.from_user.id}'>{message.from_user.full_name}</a>"
+        username = f"@{escape(message.from_user.username)}" if message.from_user.username else "No Username"
+        user_link = f"<a href='tg://user?id={message.from_user.id}'>{escape(message.from_user.full_name)}</a>"
         
         admin_text = (
             f"📩 <b>Фидбек от {user_link}</b> ({username}):\n\n"
-            f"{message.text}"
+            f"{escape(message.text)}"
         )
 
         await bot.send_message(chat_id=DEVELOPER_CHAT_ID, text=admin_text)

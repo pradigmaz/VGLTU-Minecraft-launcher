@@ -70,6 +70,23 @@ ask_generate() {
         eval "$env_var=\"$generated_value\""
     fi
 }
+
+ask_fernet_key() {
+    local var_name="$1"
+    local prompt="$2"
+    local env_var="$3"
+    local generated_value=$(openssl rand -base64 32 | tr '/+' '_-')
+
+    echo -e "${CYAN}$prompt${NC}"
+    echo -n "Сгенерировано: $generated_value. Использовать? [Y/n]: "
+    read use_generated
+
+    if [ "$use_generated" = "n" ] || [ "$use_generated" = "N" ]; then
+        ask "$var_name" "" "$prompt (введите Fernet-ключ вручную)" "$env_var"
+    else
+        eval "$env_var=\"$generated_value\""
+    fi
+}
 # --------------------------------------------
 # END FUNCTION DEFINITIONS
 # --------------------------------------------
@@ -153,6 +170,8 @@ ask_generate "POSTGRES_PASSWORD" "Пароль БД" "POSTGRES_PASSWORD" 16
 ask_generate "REDIS_PASSWORD" "Пароль Redis" "REDIS_PASSWORD" 16
 ask_generate "MINIO_ROOT_PASSWORD" "Пароль MinIO (S3)" "MINIO_ROOT_PASSWORD" 16
 ask_generate "SECRET_KEY" "JWT Secret Key" "SECRET_KEY" 32
+ask_generate "BOT_CALLBACK_SECRET" "Секрет Bot -> Backend" "BOT_CALLBACK_SECRET" 32
+ask_fernet_key "SFTP_ENCRYPTION_KEY" "Ключ шифрования SFTP/RCON" "SFTP_ENCRYPTION_KEY"
 ask "BOT_TOKEN" "" "Токен бота от @BotFather" "BOT_TOKEN"
 ask "ADMIN_IDS" "" "Telegram ID админов" "ADMIN_IDS"
 
@@ -209,19 +228,6 @@ server {
         proxy_set_header X-Real-IP \$remote_addr;
     }
 
-    # MinIO S3 API (порт 9000 проброшен из Docker)
-    location /storage/ {
-        proxy_pass http://localhost:9000/;
-        proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-        proxy_connect_timeout 600;
-        proxy_read_timeout 600;
-        send_timeout 600;
-    }
-
     # Admin Web (порт 5173 проброшен из Docker)
     location / {
         proxy_pass http://localhost:5173/;
@@ -245,6 +251,8 @@ MINIO_ROOT_USER=admin
 MINIO_ROOT_PASSWORD=$MINIO_ROOT_PASSWORD
 MINIO_USE_SSL=false
 SECRET_KEY=$SECRET_KEY
+BOT_CALLBACK_SECRET=$BOT_CALLBACK_SECRET
+SFTP_ENCRYPTION_KEY=$SFTP_ENCRYPTION_KEY
 BOT_TOKEN=$BOT_TOKEN
 ADMIN_IDS=$ADMIN_IDS
 DEVELOPER_CHAT_ID=$ADMIN_IDS

@@ -2,8 +2,9 @@ from fastapi import APIRouter, HTTPException, Depends, status, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.models import User
-from app.schemas import AuthenticateRequest, AuthenticateResponse, JoinRequest, UserCreate
+from app.schemas import AuthenticateRequest, AuthenticateResponse, JoinRequest
 from app.database import redis_client
+from app.security import verify_password
 from app.utils import get_db
 from slowapi.util import get_remote_address
 import uuid
@@ -36,27 +37,6 @@ def to_hex(u: uuid.UUID) -> str:
 def from_hex(h: str) -> uuid.UUID:
     return uuid.UUID(h)
 
-# --- 0. DEV: Создание юзера (пока нет Телеграма) ---
-@router.post("/api/dev/create_user")
-async def dev_create_user(user_data: UserCreate, db: AsyncSession = Depends(get_db)):
-    # Генерируем UUID детерминированно из telegram_id
-    # Это важно! Если игрок сменит ник, инвентарь останется, т.к. UUID зависит от ID телеги
-    mc_uuid = uuid.uuid5(uuid.NAMESPACE_OID, str(user_data.telegram_id))
-    
-    new_user = User(
-        username=user_data.username,
-        telegram_id=user_data.telegram_id,
-        mc_uuid=mc_uuid
-    )
-    db.add(new_user)
-    try:
-        await db.commit()
-        await db.refresh(new_user)
-        return {"status": "created", "uuid": to_hex(new_user.mc_uuid)}
-    except Exception as e:
-        await db.rollback()
-        return {"error": str(e)}
-
 # --- Rate Limiter ---
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -70,13 +50,14 @@ async def authenticate(
     payload: AuthenticateRequest, 
     db: AsyncSession = Depends(get_db)
 ):
-    # Rate limiting настроен глобально в main.py через SlowAPIMiddleware
-    # 1. Ищем юзера по нику (в будущем тут будет проверка JWT от телеги)
-    # Пока считаем, что payload.password - это секрет, или просто пускаем по нику для теста
+    # 1. Ищем player и проверяем его пароль.
     result = await db.execute(select(User).where(User.username == payload.username))
     user = result.scalars().first()
 
-    if not user:
+    if not user or user.is_banned or not user.password_hash:
+        raise HTTPException(status_code=403, detail="Invalid credentials")
+
+    if not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=403, detail="Invalid credentials")
 
     # 2. Генерируем Access Token (сессионный ключ для игры)
@@ -89,7 +70,7 @@ async def authenticate(
         "user_id": str(user.id),
         "username": user.username,
         "mc_uuid": to_hex(user.mc_uuid),
-        "ip": "127.0.0.1" # В реале брать из request.client.host
+        "ip": request.client.host if request.client else None,
     }
     await redis_client.set(f"session:{access_token}", json.dumps(session_data), ex=86400)
 

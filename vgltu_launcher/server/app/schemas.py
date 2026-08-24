@@ -38,10 +38,10 @@ class JoinRequest(BaseModel):
     selectedProfile: str 
     serverId: str
 
-# --- Internal / Dev Models ---
-class UserCreate(BaseModel):
-    username: str
-    telegram_id: int
+# --- Player Administration ---
+class PlayerCreate(BaseModel):
+    username: str = Field(min_length=3, max_length=50)
+    password: str = Field(min_length=12, max_length=256)
     
 # --- Manifest Models (Client) ---
 class FileManifest(BaseModel):

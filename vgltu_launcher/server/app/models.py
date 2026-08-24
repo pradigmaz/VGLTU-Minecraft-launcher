@@ -1,7 +1,7 @@
 import uuid
 import enum  # <--- NEW
 from datetime import datetime
-from sqlalchemy import Column, String, BigInteger, Boolean, ForeignKey, DateTime, Table, Integer, Enum # <--- IMPORT ENUM
+from sqlalchemy import Column, String, BigInteger, Boolean, ForeignKey, DateTime, Table, Integer, Enum, Text # <--- IMPORT ENUM
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from sqlalchemy.sql import func
@@ -33,6 +33,7 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="student") 
     is_banned: Mapped[bool] = mapped_column(Boolean, default=False)
     mc_uuid: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 # --- Сборки ---
@@ -70,13 +71,13 @@ class SFTPConnection(Base):
     host: Mapped[str] = mapped_column(String, nullable=False)
     port: Mapped[int] = mapped_column(Integer, default=22)
     username: Mapped[str] = mapped_column(String, nullable=False)
-    password: Mapped[str] = mapped_column(String, nullable=False)
+    password: Mapped[str] = mapped_column(Text, nullable=False)
     
     # === НОВЫЕ ПОЛЯ ===
     # Если rcon_host не задан, используем host от SFTP
     rcon_host: Mapped[str] = mapped_column(String, nullable=True)
     rcon_port: Mapped[int] = mapped_column(Integer, default=25575)
-    rcon_password: Mapped[str] = mapped_column(String, nullable=True)
+    rcon_password: Mapped[str] = mapped_column(Text, nullable=True)
     
     # Настройки синхронизации
     sync_mods: Mapped[bool] = mapped_column(Boolean, default=True)

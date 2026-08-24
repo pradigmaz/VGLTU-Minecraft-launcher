@@ -5,6 +5,7 @@ import logging
 from sqlalchemy.future import select
 from app.models import SFTPConnection, Instance, File as FileModel, instance_files, SideType
 from app.database import minio_client, BUCKET_NAME
+from app.security import decrypt_sftp_secret
 from datetime import datetime
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,10 @@ class SFTPSyncService:
         # 3. Подключаемся по SFTP
         transport = paramiko.Transport((config.host, config.port))
         try:
-            transport.connect(username=config.username, password=config.password)
+            transport.connect(
+                username=config.username,
+                password=decrypt_sftp_secret(config.password),
+            )
             sftp = paramiko.SFTPClient.from_transport(transport)
             
             logs = []
@@ -61,15 +65,17 @@ class SFTPSyncService:
                     if path.startswith(f"{folder}/")
                 ]
                 
-                # Создаем удаленную папку если нет
-                try: sftp.mkdir(folder)
-                except: pass
+                # Создаем удаленную папку если нет.
+                try:
+                    sftp.mkdir(folder)
+                except IOError:
+                    try:
+                        sftp.stat(folder)
+                    except IOError as error:
+                        raise RuntimeError(f"Cannot create SFTP folder {folder}") from error
 
                 # А. Получаем список файлов на сервере (для удаления лишних)
-                remote_files = set()
-                try:
-                    remote_files = set(sftp.listdir(folder))
-                except: pass
+                remote_files = set(sftp.listdir(folder))
 
                 # Б. Заливаем файлы
                 expected_filenames = set()
@@ -84,30 +90,33 @@ class SFTPSyncService:
                         attrs = sftp.stat(remote_path)
                         if attrs.st_size == file_obj.size:
                             need_upload = False
-                    except: pass # Файла нет
+                    except IOError:
+                        pass  # Файла нет
 
                     if need_upload:
                         logs.append(f"⬆️ Uploading: {filename}")
                         # Качаем с MinIO в память
                         data = minio_client.get_object(BUCKET_NAME, file_obj.s3_path)
                         # Лъем на SFTP
-                        sftp.putfo(io.BytesIO(data.read()), remote_path)
-                        data.close()
-                        data.release_conn()
+                        try:
+                            sftp.putfo(io.BytesIO(data.read()), remote_path)
+                        finally:
+                            data.close()
+                            data.release_conn()
 
                 # В. Удаляем лишнее (то, чего нет в базе, но есть на сервере)
                 for r_file in remote_files:
                     if r_file not in expected_filenames:
                         logs.append(f"🗑️ Deleting remote: {r_file}")
-                        try: sftp.remove(f"{folder}/{r_file}")
-                        except: pass
+                        sftp.remove(f"{folder}/{r_file}")
 
             config.last_sync = datetime.utcnow()
             await self.db.commit()
             return "\n".join(logs)
 
-        except Exception as e:
-            raise Exception(f"SFTP Error: {str(e)}")
+        except Exception as error:
+            logger.exception("SFTP sync failed for instance %s", instance_id)
+            raise RuntimeError("SFTP synchronization failed") from error
         finally:
             transport.close()
 
@@ -132,7 +141,10 @@ class SFTPSyncService:
         
         transport = paramiko.Transport((config.host, config.port))
         try:
-            transport.connect(username=config.username, password=config.password)
+            transport.connect(
+                username=config.username,
+                password=decrypt_sftp_secret(config.password),
+            )
             sftp = paramiko.SFTPClient.from_transport(transport)
 
             for folder in target_folders:
