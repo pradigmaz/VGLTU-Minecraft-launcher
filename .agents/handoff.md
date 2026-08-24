@@ -81,3 +81,15 @@ CHANGED: Обновлены root README, Docker Compose runbook и README admin-
 VERIFIED: Markdown-структура и локальные ссылки, актуальность Compose-команды, отсутствие устаревших Docker/deploy-инструкций, согласованность Telegram-описания с `docker-compose.yml` и `auth.py`, `git diff --check`.
 
 NEXT: Для корректной ссылки на нестандартного Telegram-бота отдельно передать `BOT_USERNAME` в backend Compose-сервис; до этого использовать ручной `/start <код>`.
+
+## 2026-08-25 — публикация документации launcher
+
+TASK: Закоммитить и отправить улучшения документации launcher.
+
+STATE: Основная документация опубликована в `origin/main` commit `203741c`; этот checkpoint подготовлен отдельным `docs(handoff)` commit.
+
+CHANGED: В опубликованный commit вошли root README, Docker Compose runbook, README admin-панели и task record документации.
+
+VERIFIED: Staged scope, `git diff --check`, scan на секреты и локальные пути, Compose config и post-push синхронизация `HEAD` с `origin/main` прошли.
+
+NEXT: При необходимости поддержки нестандартного Telegram username отдельно передать `BOT_USERNAME` в backend Compose-сервис.
