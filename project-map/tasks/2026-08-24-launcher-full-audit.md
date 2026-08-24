@@ -74,3 +74,11 @@ completed
 ### Residual
 
 Windows packaging сообщает только не-функциональные metadata warnings: нужны реальные author/description и брендовая иконка. Значения и ассеты намеренно не выдумывались.
+
+## Publication — 2026-08-24
+
+- `eb7a706` — `fix(security): закрыть уязвимости backend и storage`.
+- `2766fdd` — `fix(desktop): требовать пароль игрока и стабилизировать клиент`.
+- `6232d95` — `fix(admin): устранить ошибки lint и сборки панели`.
+- `eb8d268` — `docs(audit): зафиксировать исправления и проверки`.
+- Четыре commits прошли range publish gate и отправлены в `origin/main` без force push.

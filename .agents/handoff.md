@@ -57,3 +57,15 @@ CHANGED: Закрыты Yggdrasil password bypass и public provisioning, privat
 VERIFIED: 20 backend-тестов, оба ESLint, production builds, legacy SFTP migration, installer syntax, `git diff --check`, token scan и Compose port exposure прошли. PostgreSQL, Redis и MinIO остаются внутренними Docker-сервисами; временная migration DB удалена.
 
 NEXT: Перед реальным deployment задать уникальные рабочие secrets в `.env`, включая `SFTP_ENCRYPTION_KEY` и `BOT_CALLBACK_SECRET`. Не-функциональные package metadata warnings требуют предоставленных author/description и брендовой иконки; ничего не выдумывать.
+
+## 2026-08-24 — семантический commit и push
+
+TASK: Разделить подтверждённые изменения launcher на смысловые commits, проверить publish gate и отправить их в GitHub.
+
+STATE: Четыре смысловых commits отправлены в `origin/main` (`37d485f..eb8d268`); этот checkpoint будет отправлен отдельным docs commit.
+
+CHANGED: `eb7a706` — security backend/storage; `2766fdd` — desktop login/build; `6232d95` — admin lint/build; `eb8d268` — audit documentation.
+
+VERIFIED: Перед push выполнены `git fetch origin main`, `git diff --check origin/main..HEAD` и scan 60 добавленных/изменённых файлов на токены, ключи и локальные пути; `origin/main` не имела новых commits.
+
+NEXT: После отправки checkpoint задать реальные deployment secrets в `.env`; локальные `.agents/skills`, `.agents/AGENTS.md` и исторический cleanup task намеренно не публиковать.
