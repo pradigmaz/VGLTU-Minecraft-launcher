@@ -1,4 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { IpcRendererEvent } from 'electron'
+
+type ProgressData = { task: string; details: string; percent: number }
 
 const api = {
   getInstances: () => ipcRenderer.invoke('get-instances'),
@@ -6,13 +9,13 @@ const api = {
   login: (username: string, password: string) => ipcRenderer.invoke('login', username, password),
   
   onLog: (callback: (text: string) => void) => {
-    const handler = (_event: any, text: string) => callback(text)
+    const handler = (_event: IpcRendererEvent, text: string) => callback(text)
     ipcRenderer.on('log', handler)
     return () => ipcRenderer.removeListener('log', handler)
   },
 
-  onProgress: (callback: (data: { task: string, details: string, percent: number }) => void) => {
-    const handler = (_event: any, data: any) => callback(data)
+  onProgress: (callback: (data: ProgressData) => void) => {
+    const handler = (_event: IpcRendererEvent, data: ProgressData) => callback(data)
     ipcRenderer.on('progress', handler)
     return () => ipcRenderer.removeListener('progress', handler)
   },

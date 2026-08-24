@@ -1,7 +1,7 @@
 import { Play } from 'lucide-react'
 
 interface CardProps {
-  inst: any
+  inst: LauncherInstance
   onPlay: (id: string) => void
 }
 

@@ -7,7 +7,7 @@ interface HeaderProps {
   loginLoading: boolean
   onRefresh: () => void
   onOpenSettings: () => void
-  onLogin: (username: string) => void
+  onLogin: (username: string, password: string) => void
   onLogout: () => void
 }
 
@@ -24,10 +24,11 @@ export const Header = ({
   onLogout 
 }: HeaderProps) => {
   const [usernameInput, setUsernameInput] = useState('')
+  const [passwordInput, setPasswordInput] = useState('')
 
   const handleLoginClick = () => {
-    if (usernameInput.trim()) {
-      onLogin(usernameInput)
+    if (usernameInput.trim() && passwordInput) {
+      onLogin(usernameInput, passwordInput)
     }
   }
 
@@ -117,8 +118,9 @@ export const Header = ({
             <input 
               value={usernameInput} 
               onChange={e => setUsernameInput(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && handleLoginClick()}
               placeholder="Username"
+              autoComplete="username"
+              aria-label="Username"
               style={{ 
                 background: '#000', 
                 border: '1px solid var(--border-color)', 
@@ -126,6 +128,25 @@ export const Header = ({
                 padding: '6px 10px', 
                 color: 'white', 
                 outline: 'none', 
+                width: '120px',
+                fontSize: '0.9rem'
+              }}
+            />
+            <input
+              type="password"
+              value={passwordInput}
+              onChange={e => setPasswordInput(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleLoginClick()}
+              placeholder="Password"
+              autoComplete="current-password"
+              aria-label="Password"
+              style={{
+                background: '#000',
+                border: '1px solid var(--border-color)',
+                borderRadius: '6px',
+                padding: '6px 10px',
+                color: 'white',
+                outline: 'none',
                 width: '120px',
                 fontSize: '0.9rem'
               }}

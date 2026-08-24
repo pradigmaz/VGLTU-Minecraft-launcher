@@ -10,9 +10,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@xmcl/core": "^2.15.1",
-    "@xmcl/installer": "^6.1.2",
-    "@xmcl/user": "^4.3.0",
+    "@xmcl/core": "2.15.1",
+    "@xmcl/installer": "6.1.2",
+    "@xmcl/user": "4.3.0",
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -79,8 +79,7 @@
       "oneClick": false,
       "perMachine": false,
       "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true,
-      "include": "build/installer.nsh"
+      "deleteAppDataOnUninstall": false
     },
     "portable": {
       "artifactName": "${productName}-Portable-${version}.${ext}"

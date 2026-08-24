@@ -8,22 +8,8 @@ import { InstanceCard } from './components/InstanceCard'
 import { StatusOverlay } from './components/StatusOverlay'
 import { SettingsModal } from './components/SettingsModal'
 
-// Типизация API из preload (см. electron/preload.ts)
-interface WindowApi {
-  getInstances: () => Promise<any[]>
-  launchGame: (id: string, ram?: number) => Promise<void>
-  login: (username: string, password: string) => Promise<{ success: boolean; username?: string; error?: string }>
-  onLog: (callback: (text: string) => void) => () => void
-  onProgress: (callback: (data: { task: string, details: string, percent: number }) => void) => () => void
-  getSystemInfo: () => Promise<{ totalRam: number }>
-  openExternal: (url: string) => void
-  BOT_USERNAME: string
-}
-
-declare const window: Window & { api: WindowApi }
-
 function App() {
-  const [instances, setInstances] = useState<any[]>([])
+  const [instances, setInstances] = useState<LauncherInstance[]>([])
   const [logs, setLogs] = useState<string[]>([])
   
   // Auth State
@@ -39,7 +25,7 @@ function App() {
   const [selectedRam, setSelectedRam] = useState(2048)
 
   // Добавляем стейты для прогресса
-  const [progressData, setProgressData] = useState<{ task: string, details: string, percent: number } | null>(null)
+  const [progressData, setProgressData] = useState<LauncherProgress | null>(null)
 
   const addLog = useCallback((text: string) => {
     setLogs(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${text}`])
@@ -62,20 +48,20 @@ function App() {
   }, [addLog])
 
   // Логика входа
-  const handleLogin = async (username: string) => {
+  const handleLogin = async (username: string, password: string) => {
     setLoginLoading(true)
-    const result = await window.api.login(username, 'dummy_pass')
+    const result = await window.api.login(username, password)
     setLoginLoading(false)
     if (result.success) {
       setUser(result.username || username)
-      localStorage.setItem('pixellauncher_username', username)
+    } else {
+      addLog(`❌ ${result.error || 'Login failed.'}`)
     }
   }
 
   // Логика выхода
   const handleLogout = () => {
     setUser(null)
-    localStorage.removeItem('pixellauncher_username')
     addLog("👋 Logged out.")
   }
 
@@ -119,12 +105,6 @@ function App() {
     }
         setProgressData(data)
     })
-
-    // Авто-логин
-    const savedUser = localStorage.getItem('pixellauncher_username')
-    if (savedUser) {
-        handleLogin(savedUser)
-    }
 
     // Получение инфо о системе для ползунка
     window.api.getSystemInfo().then(info => {

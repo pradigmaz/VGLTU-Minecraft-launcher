@@ -1,4 +1,4 @@
-import { app } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import fs from 'fs-extra'
 import axios from 'axios'
@@ -17,6 +17,34 @@ const AUTHLIB_PATH = path.join(ROOT_PATH, 'authlib-injector.jar')
 import { getApiUrl } from './config'
 
 const AUTHLIB_URL = "https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.5/authlib-injector-1.2.5.jar"
+
+type MirrorOptions = Record<string, string>
+
+type InstanceFile = {
+  filename: string
+  hash: string
+  path: string
+  url: string
+}
+
+type InstanceManifest = {
+  files: InstanceFile[]
+  loader_type?: string
+  loader_version?: string
+  mc_version: string
+}
+
+type AuthData = {
+  accessToken: string
+  username: string
+  uuid: string
+}
+
+type ActiveInstance = { id: string }
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
 
 // Ленивая загрузка API URL (после app.whenReady)
 function getApiUrlLazy(): string {
@@ -52,10 +80,10 @@ axios.defaults.httpAgent = httpAgent
 axios.defaults.httpsAgent = httpsAgent
 
 export class GameManager {
-  private window: any
+  private window: BrowserWindow
   private currentMirrorIndex: number = 0
 
-  constructor(window: any) {
+  constructor(window: BrowserWindow) {
     this.window = window
   }
 
@@ -78,23 +106,24 @@ export class GameManager {
     return false
   }
 
-  async tryWithMirrors<T>(fn: (mirrorOptions: any) => Promise<T>, taskName: string): Promise<T> {
+  async tryWithMirrors<T>(fn: (mirrorOptions: MirrorOptions) => Promise<T>, taskName: string): Promise<T> {
     const startMirrorIndex = this.currentMirrorIndex
-    while (true) {
+    while (this.currentMirrorIndex < MIRROR_LIST.length) {
       const mirror = this.getCurrentMirror()
       this.log(`🌐 Trying ${taskName} with ${mirror.name}...`)
       try {
         const result = await fn(mirror.options)
         this.log(`✅ ${taskName} succeeded`)
         return result
-      } catch (error: any) {
-        this.log(`❌ ${mirror.name} failed: ${error.message}`)
+      } catch (error: unknown) {
+        this.log(`❌ ${mirror.name} failed: ${errorMessage(error)}`)
         if (!this.switchToNextMirror()) {
           this.currentMirrorIndex = startMirrorIndex
           throw new Error(`All mirrors failed`)
         }
       }
     }
+    throw new Error(`All mirrors failed`)
   }
 
   emitProgress(task: string, details: string, percent: number) {
@@ -106,13 +135,13 @@ export class GameManager {
   async retry<T>(fn: () => Promise<T>, retries = 3, delay = 1000): Promise<T> {
     try {
       return await fn()
-    } catch (err: any) {
+    } catch (error: unknown) {
       if (retries > 0) {
         this.log(`⚠️ Retry (${retries} left)...`)
         await new Promise(res => setTimeout(res, delay))
         return this.retry(fn, retries - 1, delay * 2)
       }
-      throw err
+      throw error
     }
   }
 
@@ -170,14 +199,18 @@ export class GameManager {
     return 'java'
   }
 
-  async cleanOldInstances(activeInstances: any[]) {
+  async cleanOldInstances(activeInstances: ActiveInstance[]) {
     const instancesDir = path.join(ROOT_PATH, 'instances')
     await fs.ensureDir(instancesDir)
     const localFolders = await fs.readdir(instancesDir)
     const activeIds = activeInstances.map(i => i.id)
     for (const folder of localFolders) {
       if (!activeIds.includes(folder)) {
-        try { await fs.remove(path.join(instancesDir, folder)) } catch (e: any) {}
+        try {
+          await fs.remove(path.join(instancesDir, folder))
+        } catch (error: unknown) {
+          this.log(`⚠️ Could not remove old instance ${folder}: ${errorMessage(error)}`)
+        }
       }
     }
   }
@@ -204,7 +237,12 @@ export class GameManager {
     })
   }
 
-  async installAndLaunch(instanceId: string, manifest: any, authData: any, memory: number = 2048) {
+  async installAndLaunch(
+    instanceId: string,
+    manifest: InstanceManifest,
+    authData: AuthData,
+    memory: number = 2048,
+  ) {
     const { install, installForge, getVersionList, getForgeVersionList, installDependencies } = await import('@xmcl/installer')
     
     const instanceDir = path.join(ROOT_PATH, 'instances', instanceId)
@@ -222,8 +260,8 @@ export class GameManager {
       try {
           await this.retry(() => this.downloadFile(AUTHLIB_URL, AUTHLIB_PATH))
           this.log('✅ Authlib downloaded')
-      } catch (e: any) {
-          this.log(`❌ Authlib download failed: ${e.message}`)
+      } catch (error: unknown) {
+        this.log(`❌ Authlib download failed: ${errorMessage(error)}`)
           // Не прерываем, может оно и без него запустится (нет, не запустится, но крашнемся позже)
       }
     } else {
@@ -241,7 +279,7 @@ export class GameManager {
     
     for (let i = 0; i < totalFiles; i += BATCH_SIZE) {
       const batch = manifest.files.slice(i, i + BATCH_SIZE)
-      const tasks = batch.map((file: any) => limit(async () => {
+      const tasks = batch.map((file) => limit(async () => {
         const localPath = path.join(instanceDir, file.path)
         
         const percent = 10 + Math.floor((processedCount / totalFiles) * 40)
@@ -261,7 +299,7 @@ export class GameManager {
     // 4. INSTALL VANILLA
     this.emitProgress('Installing Minecraft', `Version ${manifest.mc_version}`, 50)
     const versionJsonPath = path.join(instanceDir, 'versions', manifest.mc_version, `${manifest.mc_version}.json`)
-    let installedVersion: any
+    let installedVersion: string
     
     if (fs.existsSync(versionJsonPath)) {
       installedVersion = manifest.mc_version
@@ -277,7 +315,7 @@ export class GameManager {
 
     // 5. INSTALL FORGE
     this.emitProgress('Installing Loader', `Forge & Libraries`, 70)
-    let finalVersionId: string | any = installedVersion
+    let finalVersionId = installedVersion
     if (manifest.loader_type === 'forge') {
         const forgeVersionId = `${manifest.mc_version}-forge-${manifest.loader_version || '14.23.5.2864'}`
         const forgeJsonPath = path.join(instanceDir, 'versions', forgeVersionId, `${forgeVersionId}.json`)
@@ -298,8 +336,8 @@ export class GameManager {
             const resolvedVersion = await Version.parse(mc, finalVersionId)
             return await installDependencies(resolvedVersion, mirrorOptions)
           }, 'Dependencies installation')
-        } catch (libError: any) {
-          this.log(`⚠️ Dependency error: ${libError.message}`)
+        } catch (error: unknown) {
+          this.log(`⚠️ Dependency error: ${errorMessage(error)}`)
         }
     }
 
@@ -344,8 +382,8 @@ export class GameManager {
         }
       })
 
-    } catch (error: any) {
-      this.log(`❌ Launch failed: ${error.message}`)
+    } catch (error: unknown) {
+      this.log(`❌ Launch failed: ${errorMessage(error)}`)
       throw error
     }
   }

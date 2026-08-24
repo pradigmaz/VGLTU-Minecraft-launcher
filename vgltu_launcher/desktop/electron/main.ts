@@ -3,7 +3,6 @@ import { fileURLToPath } from 'node:url'
 import path from 'path'
 import axios from 'axios'
 import os from 'os'
-import fs from 'fs' // Импортируем fs для сохранения конфига
 import { GameManager } from './game-manager'
 import { getApiUrl } from './config'
 
@@ -11,8 +10,6 @@ import { getApiUrl } from './config'
 app.disableHardwareAcceleration();
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.join(app.getPath('userData'), 'profile.json') // Путь к профилю пользователя
-
 // URL загружается лениво после app.whenReady()
 let API_BASE = ''
 let API_URL = ''
@@ -20,6 +17,13 @@ let AUTH_URL = ''
 
 let authData: { username: string; uuid: string; accessToken: string } | null = null
 let mainWindow: BrowserWindow | null = null
+
+function errorMessage(error: unknown): string {
+  if (axios.isAxiosError<{ detail?: string }>(error)) {
+    return error.response?.data?.detail || error.message
+  }
+  return error instanceof Error ? error.message : 'Unknown error'
+}
 
 function createWindow() {
   const win = new BrowserWindow({
@@ -99,49 +103,17 @@ app.whenReady().then(() => {
      }
   })
 
-  // --- LOGIN LOGIC UPDATE ---
-  ipcMain.handle('login', async (_event, username: string, _password: string) => {
+  ipcMain.handle('login', async (_event, username: string, password: string) => {
     try {
-      gameManager.log(`🔐 Attempting login for ${username}...`)
-      
-      let telegramId: number;
-
-      // 1. Пытаемся загрузить ID из файла
-      try {
-        if (fs.existsSync(CONFIG_PATH)) {
-            const config = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf-8'));
-            if (config.username === username && config.telegramId) {
-                telegramId = config.telegramId;
-                gameManager.log(`📂 Found saved profile for ID: ${telegramId}`);
-            } else {
-                throw new Error("New user");
-            }
-        } else {
-            throw new Error("No config");
-        }
-      } catch (err) {
-        // 2. Если файла нет или юзер другой -> генерируем новый ID
-        telegramId = Math.floor(Math.random() * 10000000);
-        gameManager.log(`🆕 Generating new ID: ${telegramId}`);
-        
-        // Сохраняем новый ID
-        fs.writeFileSync(CONFIG_PATH, JSON.stringify({ username, telegramId }));
-      }
-      
-      // 3. Регистрируем/Обновляем пользователя на бэке
-      try {
-        await axios.post(`${AUTH_URL}/api/dev/create_user`, {
-            username: username,
-            telegram_id: telegramId 
-        })
-      } catch (err) { 
-          // Игнорируем ошибку "пользователь уже существует"
+      const normalizedUsername = username.trim()
+      if (!normalizedUsername || !password) {
+        return { success: false, error: 'Username and password are required' }
       }
 
-      // 4. Авторизуемся
+      gameManager.log(`🔐 Attempting login for ${normalizedUsername}...`)
       const res = await axios.post(`${AUTH_URL}/authserver/authenticate`, {
-        username,
-        password: "dummy_password", // Это ок для dev-режима
+        username: normalizedUsername,
+        password,
         agent: { name: "Minecraft", version: 1 }
       })
       
@@ -154,9 +126,10 @@ app.whenReady().then(() => {
       
       gameManager.log(`✅ Logged in as ${authData.username}`)
       return { success: true, username: authData.username }
-    } catch (e: any) {
-      gameManager.log(`❌ Login failed: ${e.response?.data?.detail || e.message}`)
-      return { success: false, error: e.response?.data?.detail || e.message }
+    } catch (error: unknown) {
+      const message = errorMessage(error)
+      gameManager.log(`❌ Login failed: ${message}`)
+      return { success: false, error: message }
     }
   })
 
@@ -175,9 +148,9 @@ app.whenReady().then(() => {
 
       await gameManager.installAndLaunch(instanceId, manifest, authData, memory)
       
-    } catch (e: any) {
-      gameManager.log(`❌ Critical Error: ${e.message}`)
-      console.error(e)
+    } catch (error: unknown) {
+      gameManager.log(`❌ Critical Error: ${errorMessage(error)}`)
+      console.error(error)
     }
   })
 })
