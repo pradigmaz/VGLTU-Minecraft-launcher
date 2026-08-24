@@ -69,3 +69,15 @@ CHANGED: `eb7a706` — security backend/storage; `2766fdd` — desktop login/bui
 VERIFIED: Перед push выполнены `git fetch origin main`, `git diff --check origin/main..HEAD` и scan 60 добавленных/изменённых файлов на токены, ключи и локальные пути; `origin/main` не имела новых commits.
 
 NEXT: После отправки checkpoint задать реальные deployment secrets в `.env`; локальные `.agents/skills`, `.agents/AGENTS.md` и исторический cleanup task намеренно не публиковать.
+
+## 2026-08-25 — улучшение документации launcher
+
+TASK: Привести пользовательскую документацию в соответствие с фактическими путями, Compose-стеком и Telegram-входом.
+
+STATE: Завершено локально; commit/push не выполнялись.
+
+CHANGED: Обновлены root README, Docker Compose runbook и README admin-панели; добавлен task record с подтверждёнными ограничениями.
+
+VERIFIED: Markdown-структура и локальные ссылки, актуальность Compose-команды, отсутствие устаревших Docker/deploy-инструкций, согласованность Telegram-описания с `docker-compose.yml` и `auth.py`, `git diff --check`.
+
+NEXT: Для корректной ссылки на нестандартного Telegram-бота отдельно передать `BOT_USERNAME` в backend Compose-сервис; до этого использовать ручной `/start <код>`.

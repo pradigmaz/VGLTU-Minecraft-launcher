@@ -1,12 +1,31 @@
-# Docker Commands для Backend
+# Docker Compose: запуск и диагностика
+
+## Рабочий каталог и быстрый запуск
+
+Команды выполняются из `vgltu_launcher`. Сначала создайте `.env` из `.env.example` и замените все значения-заглушки. Для backend обязательны `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_ROOT_PASSWORD` и `SECRET_KEY`.
+
+`SFTP_ENCRYPTION_KEY` нужен до первого SFTP/RCON-подключения и не должен меняться после сохранения секретов. `BOT_CALLBACK_SECRET` нужен только для входа в admin-панель через Telegram и должен совпадать у backend и bot.
+
+```bash
+# Основной локальный контур без Telegram-бота
+docker compose up -d --build postgres minio redis backend admin-web
+
+# Проверить состояние и открыть интерфейсы
+docker compose ps
+# admin: http://localhost:5173
+# OpenAPI: http://localhost:8000/openapi.json
+
+# Запустить bot только после настройки BOT_TOKEN, ADMIN_IDS и BOT_CALLBACK_SECRET
+docker compose up -d bot
+```
+
+`BOT_USERNAME` есть в `.env.example`, но текущий Compose не передаёт его backend. Поэтому при username, отличном от `vgltuminecraftbot`, откройте бота вручную и отправьте ему `/start <код>` вместо ссылки из admin-панели.
 
 ## Основные команды
 
-Перед первым запуском скопируйте `.env.example` в `.env`, замените все значения-заглушки и сгенерируйте `BOT_CALLBACK_SECRET` и `SFTP_ENCRYPTION_KEY`. Ключ SFTP/RCON можно получить командой из `.env.example`; после появления подключений менять его нельзя без миграции данных.
-
 ### Запуск контейнеров
 ```bash
-# Запустить все сервисы (PostgreSQL, Redis, MinIO, Backend)
+# Запустить все сервисы, включая Telegram-бота
 docker compose up -d
 
 # Запустить с пересборкой backend образа
@@ -98,29 +117,29 @@ docker compose build
 
 ### PostgreSQL
 ```bash
-# Подключиться к PostgreSQL
-docker-compose exec postgres psql -U launcher -d pixel_launcher
+# Подключиться к PostgreSQL с параметрами из .env
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
 # Выполнить SQL команду
-docker-compose exec postgres psql -U launcher -d pixel_launcher -c "SELECT * FROM users;"
+docker compose exec postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "SELECT * FROM users;"'
 
-# Создать резервную копию
-docker-compose exec postgres pg_dump -U launcher pixel_launcher > backup.sql
+# Создать резервную копию в текущем каталоге хоста
+docker compose exec -T postgres sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' > backup.sql
 
 # Восстановить из резервной копии
-docker-compose exec -T postgres psql -U launcher pixel_launcher < backup.sql
+docker compose exec -T postgres sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"' < backup.sql
 ```
 
 ### Redis
 ```bash
 # Подключиться к Redis
-docker-compose exec redis redis-cli
+docker compose exec redis sh -c 'redis-cli -a "$REDIS_PASSWORD"'
 
-# Проверить ключи
-docker-compose exec redis redis-cli KEYS "*"
+# Просмотреть ключи без блокирующего KEYS *
+docker compose exec redis sh -c 'redis-cli -a "$REDIS_PASSWORD" --scan'
 
-# Очистить Redis
-docker-compose exec redis redis-cli FLUSHALL
+# Очистить весь Redis. Необратимо; используйте только осознанно.
+docker compose exec redis sh -c 'redis-cli -a "$REDIS_PASSWORD" FLUSHALL ASYNC'
 ```
 
 ### MinIO
@@ -143,7 +162,7 @@ docker container prune
 # Удалить неиспользуемые volumes
 docker volume prune
 
-# Полная очистка (ВНИМАНИЕ: удалит всё!)
+# Полная очистка Docker host, а не только launcher (ВНИМАНИЕ: удалит всё неиспользуемое!)
 docker system prune -a
 ```
 
@@ -161,27 +180,27 @@ docker ps -s
 ### Пересборка и перезагрузка backend
 ```bash
 # Одна команда для пересборки и перезагрузки
-docker-compose up -d --build backend && docker-compose logs -f backend
+docker compose up -d --build backend && docker compose logs -f backend
 ```
 
 ### Проверка здоровья сервисов
 ```bash
-# Проверить доступность backend
-curl http://localhost:8000/
+# Проверить OpenAPI backend
+curl http://localhost:8000/openapi.json
 
 # Проверить метаданные Yggdrasil
 curl http://localhost:8000/authserver
 
 # Проверить PostgreSQL
-docker-compose exec postgres pg_isready -U launcher
+docker compose exec postgres sh -c 'pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
 
 # Проверить Redis
-docker-compose exec redis redis-cli ping
+docker compose exec redis sh -c 'redis-cli -a "$REDIS_PASSWORD" ping'
 ```
 
 ### Создание игрового пользователя
 ```bash
-# Нужна действующая JWT-сессия администратора. Пароль не передается и не хранится в открытом виде.
+# Нужна действующая JWT-сессия администратора. Пароль — не менее 12 символов; сервер хранит только hash.
 curl -X POST http://localhost:8000/api/admin/players \
   -H "Authorization: Bearer <admin-jwt>" \
   -H "Content-Type: application/json" \
@@ -190,11 +209,11 @@ curl -X POST http://localhost:8000/api/admin/players \
 
 ## Переменные окружения
 
-Используйте `.env`, созданный из `.env.example`; не храните настоящие секреты в этом документе. Для backend обязательны `POSTGRES_PASSWORD`, `REDIS_PASSWORD`, `MINIO_ROOT_PASSWORD` и `SECRET_KEY`. Перед созданием SFTP/RCON-подключений задайте `SFTP_ENCRYPTION_KEY`; для входа админки через бота задайте `BOT_CALLBACK_SECRET`.
+Используйте `.env`, созданный из `.env.example`; не храните настоящие секреты в этом документе. Редактируйте `.env`, а не `docker-compose.yml`, когда меняете пароли, ключи или Telegram-настройки.
 
-Для изменения переменных отредактируй `docker-compose.yml` и выполни:
+После изменения `.env` пересоздайте затронутые сервисы:
 ```bash
-docker-compose up -d --build
+docker compose up -d --build
 ```
 
 ## Решение проблем
@@ -202,35 +221,35 @@ docker-compose up -d --build
 ### Backend не запускается
 ```bash
 # Проверить логи
-docker-compose logs backend
+docker compose logs backend
 
 # Пересобрать образ
-docker-compose build --no-cache backend
+docker compose build --no-cache backend
 
 # Перезагрузить
-docker-compose up -d --build backend
+docker compose up -d --build backend
 ```
 
 ### Ошибка подключения к БД
 ```bash
 # Проверить статус PostgreSQL
-docker-compose ps postgres
+docker compose ps postgres
 
 # Проверить логи PostgreSQL
-docker-compose logs postgres
+docker compose logs postgres
 
 # Перезагрузить PostgreSQL
-docker-compose restart postgres
+docker compose restart postgres
 ```
 
 ### Очистить всё и начать заново
 ```bash
-# Остановить и удалить всё (включая данные!)
-docker-compose down -v
+# Остановить и удалить данные launcher (включая PostgreSQL volume)
+docker compose down -v
 
 # Пересобрать образы
-docker-compose build
+docker compose build
 
 # Запустить заново
-docker-compose up -d
+docker compose up -d
 ```

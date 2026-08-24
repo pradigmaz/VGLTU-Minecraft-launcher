@@ -1,16 +1,44 @@
-# React + Vite
+# Административная панель
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React-приложение для управления сборками, файлами, SFTP/RCON и настройками экземпляров launcher. В рабочем окружении его собирает Docker и отдаёт Nginx из compose-сервиса `admin-web`.
 
-Currently, two official plugins are available:
+## Запуск через Docker Compose
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Из каталога `vgltu_launcher`:
 
-## React Compiler
+```bash
+docker compose up -d --build postgres minio redis backend admin-web
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Панель будет доступна по адресу `http://localhost:5173`. Backend API по умолчанию работает на `http://localhost:8000/api`.
 
-## Expanding the ESLint configuration
+## Вход администратора
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Вход выполняется через Telegram-бота. Перед запуском bot укажите в `.env`:
+
+* `BOT_TOKEN`;
+* числовой Telegram ID администратора в `ADMIN_IDS`;
+* одинаковый `BOT_CALLBACK_SECRET` для backend и bot.
+
+Затем запустите bot:
+
+```bash
+docker compose up -d bot
+```
+
+`BOT_USERNAME` есть в `.env.example`, но текущий Compose не передаёт его backend. Поэтому ссылка из панели ведёт к `@vgltuminecraftbot`; если у запущенного бота другой username, откройте его вручную и отправьте `/start <код>`.
+
+Код действует пять минут и удаляется после успешного входа.
+
+## Локальная разработка интерфейса
+
+Оставьте backend запущенным, остановите compose-сервис admin-панели, затем выполните:
+
+```bash
+docker compose stop admin-web
+cd admin-web
+npm install
+npm run dev
+```
+
+Vite использует `http://localhost:8000/api`, если `VITE_API_URL` не задана. Для проверки перед изменением отправляйте `npm run lint`, для production-сборки — `npm run build`.
