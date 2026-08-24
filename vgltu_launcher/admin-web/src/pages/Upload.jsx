@@ -6,7 +6,7 @@ import {
   HelpCircle, X, BookOpen 
 } from 'lucide-react';
 import api from '../lib/api';
-import { useLanguage } from '../lib/LanguageContext';
+import { useLanguage } from '../lib/useContexts';
 
 export default function UploadPage() {
   const { t } = useLanguage();
@@ -38,9 +38,6 @@ export default function UploadPage() {
       .then(data => {
         const releases = data.versions.filter(v => v.type === 'release');
         setVersions(releases);
-        if (releases.length > 0 && !formData.mc_version) {
-            setFormData(prev => ({ ...prev, mc_version: releases[0].id }));
-        }
       })
       .catch(err => console.error("Failed to fetch MC versions", err))
       .finally(() => setLoadingVersions(false));

@@ -1,14 +1,13 @@
-import { createContext, useContext, useState } from "react";
+import { useState } from "react";
 import ru from "../locales/ru.json";
 import en from "../locales/en.json";
+import { LanguageContext } from "./contexts";
 
 // Объект с переводами
 const translations = {
   en,
   ru
 };
-
-const LanguageContext = createContext();
 
 export function LanguageProvider({ children }) {
   // Инициализация языка из localStorage или дефолтного (ru)
@@ -29,5 +28,3 @@ export function LanguageProvider({ children }) {
     </LanguageContext.Provider>
   );
 }
-
-export const useLanguage = () => useContext(LanguageContext);

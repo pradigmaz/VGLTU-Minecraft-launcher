@@ -1,6 +1,5 @@
 import { LogOut, Moon, Sun, Languages, Server } from 'lucide-react';
-import { useTheme } from '../lib/ThemeContext';
-import { useLanguage } from '../lib/LanguageContext';
+import { useTheme, useLanguage } from '../lib/useContexts';
 
 export default function Header({ onLogout }) {
   const { theme, toggleTheme } = useTheme();

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../lib/api'
 import ConfigEditorModal from '../components/ConfigEditorModal'
-import { useLanguage } from '../lib/LanguageContext'
+import { useLanguage } from '../lib/useContexts'
 
 const CATEGORIES = [
   { id: 'all', label: 'categoryAll', icon: Archive },
@@ -47,16 +47,28 @@ export default function FileManager() {
   // Side Menu State (какой файл сейчас меняем)
   const [openSideMenu, setOpenSideMenu] = useState(null); // path string
 
-  const fetchFiles = () => {
-    setLoading(true)
-    api.get(`/admin/instances/${id}/files`)
-      .then(res => setFiles(res.data))
-      .catch(err => console.error("Failed to load files", err))
-      .finally(() => setLoading(false))
+  const fetchFiles = async () => {
+    try {
+      const response = await api.get(`/admin/instances/${id}/files`)
+      setFiles(response.data)
+    } catch (error) {
+      console.error("Failed to load files", error)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    fetchFiles()
+    let cancelled = false
+    api.get(`/admin/instances/${id}/files`)
+      .then(response => {
+        if (!cancelled) setFiles(response.data)
+      })
+      .catch(error => console.error("Failed to load files", error))
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
   }, [id])
 
   // --- Handlers ---
@@ -90,11 +102,9 @@ export default function FileManager() {
     if (!confirm(t('deleteSelectedConfirm').replace('{count}', selectedFiles.length))) return
     
     setLoading(true)
-    let successCount = 0
     for (const path of selectedFiles) {
       try {
         await api.delete(`/admin/instances/${id}/files`, { params: { path } })
-        successCount++
       } catch (e) { console.error(e) }
     }
     setSelectedFiles([])
@@ -129,7 +139,11 @@ export default function FileManager() {
         const formData = new FormData()
         formData.append('file', file)
         formData.append('path', path)
-        try { await api.post(`/admin/instances/${id}/files`, formData) } catch(e){}
+        try {
+          await api.post(`/admin/instances/${id}/files`, formData)
+        } catch (error) {
+          console.error("Failed to upload file", error)
+        }
     }
     setUploading(false)
     fetchFiles()
@@ -152,12 +166,13 @@ export default function FileManager() {
 
   return (
     <div className="flex flex-col h-full animate-in fade-in" onClick={() => setOpenSideMenu(null)}>
-      <ConfigEditorModal 
-        isOpen={editorOpen} 
-        onClose={() => setEditorOpen(false)} 
-        instanceId={id} 
-        filePath={selectedFile} 
-      />
+      {editorOpen && (
+        <ConfigEditorModal
+          onClose={() => setEditorOpen(false)}
+          instanceId={id}
+          filePath={selectedFile}
+        />
+      )}
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-4 mb-6">

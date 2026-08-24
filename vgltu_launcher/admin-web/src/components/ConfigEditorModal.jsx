@@ -4,12 +4,11 @@ import MDEditor, { commands } from '@uiw/react-md-editor'; // <--- Импорт�
 import '@uiw/react-md-editor/markdown-editor.css'; 
 
 import api from '../lib/api'
-import { useTheme } from '../lib/ThemeContext';
-import { useLanguage } from '../lib/LanguageContext';
+import { useTheme, useLanguage } from '../lib/useContexts';
 
-export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePath }) {
+export default function ConfigEditorModal({ onClose, instanceId, filePath }) {
   const [content, setContent] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const { theme } = useTheme(); 
   const { t } = useLanguage();
@@ -18,17 +17,20 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
   const isJson = filePath?.endsWith('.json');
 
   useEffect(() => {
-    if (isOpen && filePath) {
-      setLoading(true)
-      api.get(`/admin/instances/${instanceId}/config`, { params: { path: filePath } })
-        .then(res => setContent(res.data))
-        .catch(err => {
-            console.error(err);
-            setContent("");
-        })
-        .finally(() => setLoading(false))
-    }
-  }, [isOpen, instanceId, filePath])
+    let cancelled = false
+    api.get(`/admin/instances/${instanceId}/config`, { params: { path: filePath } })
+      .then(res => {
+        if (!cancelled) setContent(res.data)
+      })
+      .catch(error => {
+        console.error(error)
+        if (!cancelled) setContent("")
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [instanceId, filePath])
 
   const handleSave = async () => {
     setSaving(true)
@@ -41,8 +43,6 @@ export default function ConfigEditorModal({ isOpen, onClose, instanceId, filePat
       setSaving(false)
     }
   }
-
-  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">

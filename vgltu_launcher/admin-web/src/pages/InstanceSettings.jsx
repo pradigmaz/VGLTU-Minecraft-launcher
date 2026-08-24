@@ -6,7 +6,7 @@ import {
   HardDrive, Globe, ChevronRight
 } from 'lucide-react';
 import api from '../lib/api';
-import { useLanguage } from '../lib/LanguageContext';
+import { useLanguage } from '../lib/useContexts';
 import FileManager from './FileManager'; 
 
 // --- MODALS ---

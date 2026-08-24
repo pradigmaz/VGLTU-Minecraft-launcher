@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Trash2, Box, Settings, Layers, Loader2, Cpu, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
-import { useLanguage } from '../lib/LanguageContext';
+import { useLanguage } from '../lib/useContexts';
 import api from '../lib/api';
 
 // Функция для русских склонений
@@ -45,16 +45,28 @@ export default function Dashboard() {
   const [currentStep, setCurrentStep] = useState(''); // Text description
   const [toast, setToast] = useState(null);
 
-  const fetchInstances = () => {
-    setLoading(true);
-    api.get('/admin/instances')
-      .then(res => setInstances(res.data))
-      .catch(err => console.error("Failed to load instances", err))
-      .finally(() => setLoading(false));
+  const fetchInstances = async () => {
+    try {
+      const response = await api.get('/admin/instances');
+      setInstances(response.data);
+    } catch (error) {
+      console.error("Failed to load instances", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchInstances();
+    let cancelled = false;
+    api.get('/admin/instances')
+      .then(response => {
+        if (!cancelled) setInstances(response.data);
+      })
+      .catch(error => console.error("Failed to load instances", error))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const openDeleteModal = (inst) => {

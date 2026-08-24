@@ -1,6 +1,5 @@
-import { createContext, useContext, useEffect, useState } from "react";
-
-const ThemeContext = createContext();
+import { useEffect, useState } from "react";
+import { ThemeContext } from "./contexts";
 
 export function ThemeProvider({ children }) {
   // Проверяем сохраненную тему или настройки системы
@@ -30,5 +29,3 @@ export function ThemeProvider({ children }) {
     </ThemeContext.Provider>
   );
 }
-
-export const useTheme = () => useContext(ThemeContext);

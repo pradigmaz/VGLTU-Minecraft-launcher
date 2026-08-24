@@ -1,5 +1,5 @@
 # 1. Сборка React приложения
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 # Используем npm install вместо npm ci (package-lock.json может отсутствовать)
